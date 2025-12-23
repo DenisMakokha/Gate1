@@ -1,0 +1,24 @@
+Gate 1 System - Desktop Agent
+End User License Agreement
+
+Copyright (c) 2024 Gate 1 System. All Rights Reserved.
+
+This software is proprietary and confidential. Unauthorized copying, 
+distribution, modification, or use of this software, via any medium, 
+is strictly prohibited.
+
+This software is provided to authorized users only for the purpose of 
+managing media files as part of the Gate 1 System workflow.
+
+By installing and using this software, you agree to:
+
+1. Use the software only for its intended purpose within the Gate 1 System
+2. Not attempt to reverse engineer, decompile, or disassemble the software
+3. Not distribute or share the software with unauthorized parties
+4. Comply with all data handling and privacy policies
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+For support, contact: support@gate1system.org

@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate 1 Agent</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --danger: #ef4444;
+            --danger-light: #fee2e2;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #334155;
+            --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Titlebar */
+        .titlebar {
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            height: 36px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 12px;
+            -webkit-app-region: drag;
+        }
+
+        .titlebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .titlebar-logo {
+            width: 20px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .titlebar h1 {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .titlebar-controls {
+            display: flex;
+            gap: 6px;
+            -webkit-app-region: no-drag;
+        }
+
+        .titlebar-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .titlebar-btn:hover { transform: scale(1.15); }
+        .btn-close { background: #ff5f57; }
+        .btn-min { background: #febc2e; }
+        .btn-max { background: #28c840; }
+
+        /* Main Container */
+        .app-container {
+            height: calc(100vh - 36px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Views */
+        .view { display: none; height: 100%; }
+        .view.active { display: flex; flex-direction: column; }
+
+        /* Login View */
+        .login-view {
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            background: linear-gradient(180deg, var(--bg-dark) 0%, #1a1a2e 100%);
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-logo {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 28px;
+            font-weight: 700;
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.4);
+        }
+
+        .login-header h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .login-header p {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            border-radius: 10px;
+        }
+
+        .btn-sm {
+            padding: 10px 16px;
+            font-size: 13px;
+        }
+
+        /* Dashboard View */
+        .dashboard-view {
+            padding: 20px;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .dashboard-view::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .dashboard-view::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .dashboard-view::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-card);
+            border-radius: 14px;
+            padding: 16px 20px;
+            border: 1px solid var(--border);
+        }
+
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-indicator {
+            position: relative;
+            width: 44px;
+            height: 44px;
+            background: rgba(16, 185, 129, 0.15);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-indicator.online { background: rgba(16, 185, 129, 0.15); }
+        .status-indicator.offline { background: rgba(239, 68, 68, 0.15); }
+        .status-indicator.syncing { background: rgba(99, 102, 241, 0.15); }
+
+        .status-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+
+        .status-indicator.offline .status-dot { background: var(--danger); }
+        .status-indicator.syncing .status-dot {
+            background: var(--primary);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+        }
+
+        .status-info h3 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .status-info p {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-right {
+            text-align: right;
+        }
+
+        .status-right .latency {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .status-right .latency-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 14px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 18px;
+        }
+
+        .stat-icon.files { background: rgba(99, 102, 241, 0.15); }
+        .stat-icon.synced { background: rgba(16, 185, 129, 0.15); }
+        .stat-icon.issues { background: rgba(245, 158, 11, 0.15); }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Section Card */
+        .section-card {
+            background: var(--bg-card);
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-content {
+            padding: 16px 20px;
+        }
+
+        /* Session Card */
+        .session-item {
+            background: var(--bg-dark);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+
+        .session-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .session-name {
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .session-name .icon {
+            width: 28px;
+            height: 28px;
+            background: rgba(99, 102, 241, 0.15);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .session-stats {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, #8b5cf6 100%);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        /* Activity List */
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.success { background: var(--success-light); color: var(--success); }
+        .activity-icon.warning { background: var(--warning-light); color: var(--warning); }
+        .activity-icon.error { background: var(--danger-light); color: var(--danger); }
+        .activity-icon.info { background: rgba(99, 102, 241, 0.15); color: var(--primary); }
+
+        .activity-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .activity-text {
+            font-size: 13px;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .activity-time {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 30px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 13px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 28px;
+            width: 100%;
+            max-width: 380px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        .modal-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 24px;
+        }
+
+        .modal-icon.warning {
+            background: var(--warning-light);
+            color: var(--warning);
+        }
+
+        .modal-icon.danger {
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .modal-icon.info {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--primary);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .modal-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .modal-buttons .btn {
+            flex: 1;
+        }
+
+        /* Folder List */
+        .folder-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-dark);
+            border-radius: 10px;
+            margin-bottom: 8px;
+        }
+
+        .folder-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .folder-icon {
+            width: 36px;
+            height: 36px;
+            background: rgba(99, 102, 241, 0.15);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .folder-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .folder-name {
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .folder-path {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in {
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 16px;
+        }
+
+        .quick-actions .btn {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <!-- Titlebar -->
+    <div class="titlebar">
+        <div class="titlebar-brand">
+            <div class="titlebar-logo">G1</div>
+            <h1>GATE 1 AGENT</h1>
+        </div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn btn-min" onclick="minimizeWindow()"></button>
+            <button class="titlebar-btn btn-max" onclick="maximizeWindow()"></button>
+            <button class="titlebar-btn btn-close" onclick="closeWindow()"></button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Login View -->
+        <div id="loginView" class="view login-view">
+            <div class="login-card animate-in">
+                <div class="login-header">
+                    <div class="login-logo">G1</div>
+                    <h2>Welcome Back</h2>
+                    <p>Sign in to Gate 1 System</p>
+                </div>
+                <form onsubmit="login(event)">
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" id="loginEmail" class="form-input" placeholder="you@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <span>Sign In</span>
+                        <span>→</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Registration View -->
+        <div id="registrationView" class="view login-view">
+            <div class="login-card animate-in">
+                <div class="login-header">
+                    <div class="login-logo">G1</div>
+                    <h2>Setup Agent</h2>
+                    <p>Complete your editor profile</p>
+                </div>
+                <form onsubmit="registerAgent(event)">
+                    <div class="form-group">
+                        <label class="form-label">Your Full Name</label>
+                        <input type="text" id="editorName" class="form-input" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Group Code</label>
+                        <input type="text" id="groupCode" class="form-input" placeholder="e.g., G-07">
+                    </div>
+                    <div id="groupInfo" class="hidden" style="background: var(--success-light); padding: 12px; border-radius: 10px; margin-bottom: 20px;">
+                        <div style="color: var(--success); font-weight: 600; font-size: 13px;">✓ Group Found</div>
+                        <div id="groupLeaderName" style="font-size: 12px; color: var(--text-muted);"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <span>Complete Setup</span>
+                        <span>→</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dashboard View -->
+        <div id="dashboardView" class="view dashboard-view">
+            <!-- Status Bar -->
+            <div class="status-bar animate-in">
+                <div class="status-left">
+                    <div id="statusIndicator" class="status-indicator online">
+                        <div class="status-dot"></div>
+                    </div>
+                    <div class="status-info">
+                        <h3 id="editorNameDisplay">Editor Name</h3>
+                        <p id="deviceIdDisplay">Device ID</p>
+                    </div>
+                </div>
+                <div class="status-right">
+                    <div id="latencyValue" class="latency">--</div>
+                    <div class="latency-label">Latency</div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid animate-in" style="animation-delay: 0.1s">
+                <div class="stat-card">
+                    <div class="stat-icon files">📁</div>
+                    <div id="filesDetected" class="stat-value">0</div>
+                    <div class="stat-label">Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon synced">✓</div>
+                    <div id="filesSynced" class="stat-value">0</div>
+                    <div class="stat-label">Synced</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon issues">⚠</div>
+                    <div id="issuesCount" class="stat-value">0</div>
+                    <div class="stat-label">Issues</div>
+                </div>
+            </div>
+
+            <!-- Active Sessions -->
+            <div id="sessionsCard" class="section-card animate-in hidden" style="animation-delay: 0.2s">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span>💾</span>
+                        <span>Active SD Sessions</span>
+                    </div>
+                </div>
+                <div id="sessionsList" class="section-content"></div>
+            </div>
+
+            <!-- Watched Folders -->
+            <div class="section-card animate-in" style="animation-delay: 0.3s">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span>📂</span>
+                        <span>Watched Folders</span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="openSettings()">Configure</button>
+                </div>
+                <div id="foldersList" class="section-content">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📁</div>
+                        <div class="empty-state-text">No folders configured yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="section-card animate-in" style="animation-delay: 0.4s">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span>📋</span>
+                        <span>Recent Activity</span>
+                    </div>
+                </div>
+                <div id="activityList" class="section-content">
+                    <div class="activity-item">
+                        <div class="activity-icon success">✓</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Agent started successfully</div>
+                            <div class="activity-time">Just now</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions animate-in" style="animation-delay: 0.5s">
+                <button class="btn btn-secondary" onclick="reportIssue()">
+                    <span>⚠</span>
+                    <span>Report Issue</span>
+                </button>
+                <button class="btn btn-primary" onclick="syncNow()">
+                    <span>🔄</span>
+                    <span>Sync Now</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SD Card Binding Modal -->
+    <div id="sdBindModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon info">💾</div>
+            <h3 class="modal-title">New SD Card Detected</h3>
+            <p class="modal-desc">This SD card is not registered. Please enter the camera details to continue.</p>
+            <div class="form-group">
+                <label class="form-label">Camera Number</label>
+                <input type="number" id="cameraNumber" class="form-input" placeholder="e.g., 10">
+            </div>
+            <div class="form-group">
+                <label class="form-label">SD Label</label>
+                <input type="text" id="sdLabel" class="form-input" placeholder="e.g., A, B, C" maxlength="1">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal('sdBindModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="bindSdCard()">Register</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Early Removal Warning Modal -->
+    <div id="earlyRemovalModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon danger">⚠️</div>
+            <h3 class="modal-title">SD Card Removed Early</h3>
+            <p class="modal-desc">
+                <strong id="pendingFilesCount">0</strong> files have NOT been copied from this SD card. 
+                Your group leader will be notified of this action.
+            </p>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" onclick="confirmEarlyRemoval()">I Understand</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filename Issue Modal -->
+    <div id="filenameIssueModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon warning">📝</div>
+            <h3 class="modal-title">Filename Issue Detected</h3>
+            <p id="issueDetails" class="modal-desc">The filename does not match the expected format.</p>
+            <div style="background: var(--bg-dark); padding: 12px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 12px; text-align: center;">
+                FULLNAME_AGE_CONDITION_REGION.mp4
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal('filenameIssueModal')">Fix Later</button>
+                <button class="btn btn-primary" onclick="closeModal('filenameIssueModal')">Got It</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal" style="max-width: 420px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 class="modal-title" style="margin: 0;">⚙️ Settings</h3>
+                <button onclick="closeModal('settingsModal')" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px;">✕</button>
+            </div>
+            
+            <div style="max-height: 400px; overflow-y: auto;">
+                <!-- API Configuration -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server Configuration</h4>
+                    <div class="form-group">
+                        <label class="form-label">API Server URL</label>
+                        <input type="text" id="settingsApiUrl" class="form-input" placeholder="http://localhost:8000/api">
+                    </div>
+                </div>
+
+                <!-- Watched Folders -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Watched Folders</h4>
+                    <div id="watchedFoldersList" style="margin-bottom: 12px;"></div>
+                    <button class="btn btn-secondary btn-sm" onclick="addWatchedFolder()" style="width: 100%;">
+                        <span>+ Add Folder</span>
+                    </button>
+                </div>
+
+                <!-- Startup Options -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Startup</h4>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: var(--bg-card-hover); border-radius: 8px; margin-bottom: 8px;">
+                        <input type="checkbox" id="settingsAutoStart" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                        <div>
+                            <div style="font-size: 14px;">Start with Windows</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">Launch agent when you log in</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: var(--bg-card-hover); border-radius: 8px;">
+                        <input type="checkbox" id="settingsMinimizeToTray" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                        <div>
+                            <div style="font-size: 14px;">Minimize to Tray</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">Hide to system tray when minimized</div>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Notifications -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Notifications</h4>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: var(--bg-card-hover); border-radius: 8px; margin-bottom: 8px;">
+                        <input type="checkbox" id="settingsNotifySync" checked style="width: 18px; height: 18px; accent-color: var(--primary);">
+                        <div>
+                            <div style="font-size: 14px;">Sync Notifications</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">Show notifications for file syncs</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: var(--bg-card-hover); border-radius: 8px;">
+                        <input type="checkbox" id="settingsNotifyIssues" checked style="width: 18px; height: 18px; accent-color: var(--primary);">
+                        <div>
+                            <div style="font-size: 14px;">Issue Alerts</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">Alert when filename issues are detected</div>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- About -->
+                <div style="text-align: center; padding: 16px; background: var(--bg-card-hover); border-radius: 8px;">
+                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Gate 1 Agent</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">Version 1.0.0</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">© 2024 Gate 1 System</div>
+                </div>
+            </div>
+
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="closeModal('settingsModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        let currentSdInfo = null;
+        let currentSession = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const isRegistered = await ipcRenderer.invoke('get-store', 'isRegistered');
+                const token = await ipcRenderer.invoke('get-store', 'token');
+
+                if (!token) {
+                    showView('loginView');
+                } else if (!isRegistered) {
+                    showView('registrationView');
+                } else {
+                    showView('dashboardView');
+                    loadDashboard();
+                }
+            } catch (e) {
+                showView('loginView');
+            }
+        });
+
+        function showView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+        }
+
+        async function login(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                await ipcRenderer.invoke('login', { email, password });
+                const isRegistered = await ipcRenderer.invoke('get-store', 'isRegistered');
+                
+                if (isRegistered) {
+                    showView('dashboardView');
+                    loadDashboard();
+                } else {
+                    showView('registrationView');
+                }
+            } catch (error) {
+                alert('Login failed: ' + (error.message || 'Invalid credentials'));
+            }
+        }
+
+        async function registerAgent(e) {
+            e.preventDefault();
+            const editorName = document.getElementById('editorName').value;
+            const groupCode = document.getElementById('groupCode').value;
+
+            try {
+                const deviceId = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+                
+                await ipcRenderer.invoke('register-agent', {
+                    editor_name: editorName,
+                    device_id: deviceId,
+                    os: navigator.platform,
+                    agent_version: '1.0.0',
+                    group_code: groupCode || undefined,
+                });
+
+                showView('dashboardView');
+                loadDashboard();
+            } catch (error) {
+                alert('Registration failed: ' + (error.message || 'Unknown error'));
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const user = await ipcRenderer.invoke('get-store', 'user');
+                const deviceId = await ipcRenderer.invoke('get-store', 'deviceId');
+
+                document.getElementById('editorNameDisplay').textContent = user?.name || 'Editor';
+                document.getElementById('deviceIdDisplay').textContent = deviceId || 'Not registered';
+
+                // Simulate latency
+                document.getElementById('latencyValue').textContent = Math.floor(Math.random() * 50 + 20) + 'ms';
+
+                // Load sessions
+                const sessions = await ipcRenderer.invoke('get-active-sessions');
+                updateSessionsList(sessions || []);
+            } catch (e) {
+                console.error('Failed to load dashboard:', e);
+            }
+        }
+
+        function updateSessionsList(sessions) {
+            const card = document.getElementById('sessionsCard');
+            const list = document.getElementById('sessionsList');
+
+            if (!sessions || sessions.length === 0) {
+                card.classList.add('hidden');
+                return;
+            }
+
+            card.classList.remove('hidden');
+            list.innerHTML = sessions.map(s => {
+                const progress = s.filesDetected > 0 ? (s.filesCopied / s.filesDetected) * 100 : 0;
+                return `
+                    <div class="session-item">
+                        <div class="session-header">
+                            <div class="session-name">
+                                <div class="icon">📷</div>
+                                <span>Camera ${s.cameraNumber}${s.sdLabel || ''}</span>
+                            </div>
+                            <div class="session-stats">${s.filesCopied} / ${s.filesDetected} files</div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addActivity(message, type = 'success') {
+            const list = document.getElementById('activityList');
+            const icons = { success: '✓', warning: '⚠', error: '✕', info: 'ℹ' };
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            const item = document.createElement('div');
+            item.className = 'activity-item';
+            item.innerHTML = `
+                <div class="activity-icon ${type}">${icons[type]}</div>
+                <div class="activity-content">
+                    <div class="activity-text">${message}</div>
+                    <div class="activity-time">${time}</div>
+                </div>
+            `;
+            list.insertBefore(item, list.firstChild);
+
+            while (list.children.length > 8) {
+                list.removeChild(list.lastChild);
+            }
+        }
+
+        function updateStats(files, synced, issues) {
+            document.getElementById('filesDetected').textContent = files;
+            document.getElementById('filesSynced').textContent = synced;
+            document.getElementById('issuesCount').textContent = issues;
+        }
+
+        // IPC Event Handlers
+        ipcRenderer.on('sd-inserted', (event, sdInfo) => {
+            addActivity(`SD card detected: ${sdInfo.fileCount} files`, 'info');
+        });
+
+        ipcRenderer.on('sd-new', (event, sdInfo) => {
+            currentSdInfo = sdInfo;
+            document.getElementById('sdBindModal').classList.add('active');
+        });
+
+        ipcRenderer.on('sd-recognized', (event, sdCard) => {
+            addActivity(`Camera ${sdCard.camera_number}${sdCard.sd_label} connected`, 'success');
+        });
+
+        ipcRenderer.on('sd-early-removal', (event, data) => {
+            currentSession = data.session;
+            document.getElementById('pendingFilesCount').textContent = data.pendingFiles;
+            document.getElementById('earlyRemovalModal').classList.add('active');
+        });
+
+        ipcRenderer.on('sd-safe-removal', (event, session) => {
+            addActivity(`Camera ${session.cameraNumber}${session.sdLabel} safely removed`, 'success');
+        });
+
+        ipcRenderer.on('file-renamed', (event, data) => {
+            const synced = parseInt(document.getElementById('filesSynced').textContent) + 1;
+            document.getElementById('filesSynced').textContent = synced;
+
+            if (data.parseResult?.status === 'error') {
+                document.getElementById('issueDetails').textContent = 
+                    data.parseResult.issues?.map(i => i.message).join(', ') || 'Invalid filename format';
+                document.getElementById('filenameIssueModal').classList.add('active');
+                addActivity(`Filename issue: ${data.newName}`, 'warning');
+                
+                const issues = parseInt(document.getElementById('issuesCount').textContent) + 1;
+                document.getElementById('issuesCount').textContent = issues;
+            } else {
+                addActivity(`Synced: ${data.newName}`, 'success');
+            }
+        });
+
+        ipcRenderer.on('file-copied', (event, data) => {
+            ipcRenderer.invoke('get-active-sessions').then(updateSessionsList);
+        });
+
+        async function bindSdCard() {
+            const cameraNumber = document.getElementById('cameraNumber').value;
+            const sdLabel = document.getElementById('sdLabel').value;
+
+            if (!cameraNumber || !sdLabel) {
+                alert('Please enter camera number and SD label');
+                return;
+            }
+
+            try {
+                await ipcRenderer.invoke('bind-sd-card', {
+                    hardware_id: currentSdInfo?.hardwareId,
+                    fs_uuid: currentSdInfo?.fsUuid,
+                    camera_number: parseInt(cameraNumber),
+                    sd_label: sdLabel.toUpperCase(),
+                    capacity_bytes: currentSdInfo?.totalSizeBytes,
+                });
+
+                closeModal('sdBindModal');
+                addActivity(`Camera ${cameraNumber}${sdLabel.toUpperCase()} registered`, 'success');
+                document.getElementById('cameraNumber').value = '';
+                document.getElementById('sdLabel').value = '';
+            } catch (error) {
+                alert('Failed to register SD card');
+            }
+        }
+
+        async function confirmEarlyRemoval() {
+            try {
+                await ipcRenderer.invoke('confirm-early-removal', currentSession?.sessionId, 'early_confirmed');
+                closeModal('earlyRemovalModal');
+                addActivity('Early removal confirmed - leader notified', 'warning');
+            } catch (error) {
+                console.error('Failed to confirm early removal:', error);
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function syncNow() {
+            addActivity('Manual sync initiated', 'info');
+            ipcRenderer.invoke('sync-now').catch(() => {});
+        }
+
+        function reportIssue() {
+            addActivity('Opening issue reporter...', 'info');
+        }
+
+        let watchedFolders = [];
+
+        async function openSettings() {
+            // Load current settings
+            const config = await ipcRenderer.invoke('get-store', 'config') || {};
+            watchedFolders = config.watchedFolders || [];
+            
+            document.getElementById('settingsApiUrl').value = config.apiUrl || 'http://localhost:8000/api';
+            document.getElementById('settingsAutoStart').checked = config.autoStart || false;
+            document.getElementById('settingsMinimizeToTray').checked = config.minimizeToTray || false;
+            document.getElementById('settingsNotifySync').checked = config.notifySync !== false;
+            document.getElementById('settingsNotifyIssues').checked = config.notifyIssues !== false;
+            
+            renderWatchedFolders();
+            document.getElementById('settingsModal').classList.add('active');
+        }
+
+        function renderWatchedFolders() {
+            const list = document.getElementById('watchedFoldersList');
+            if (watchedFolders.length === 0) {
+                list.innerHTML = '<div style="text-align: center; padding: 16px; color: var(--text-muted); font-size: 13px;">No folders configured</div>';
+                return;
+            }
+            
+            list.innerHTML = watchedFolders.map((folder, index) => `
+                <div style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-card-hover); border-radius: 8px; margin-bottom: 8px;">
+                    <span style="flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📁 ${folder}</span>
+                    <button onclick="removeWatchedFolder(${index})" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px;">✕</button>
+                </div>
+            `).join('');
+        }
+
+        async function addWatchedFolder() {
+            try {
+                const result = await ipcRenderer.invoke('select-folder');
+                if (result && !watchedFolders.includes(result)) {
+                    watchedFolders.push(result);
+                    renderWatchedFolders();
+                }
+            } catch (e) {
+                console.error('Failed to select folder:', e);
+            }
+        }
+
+        function removeWatchedFolder(index) {
+            watchedFolders.splice(index, 1);
+            renderWatchedFolders();
+        }
+
+        async function saveSettings() {
+            const config = {
+                apiUrl: document.getElementById('settingsApiUrl').value,
+                watchedFolders: watchedFolders,
+                autoStart: document.getElementById('settingsAutoStart').checked,
+                minimizeToTray: document.getElementById('settingsMinimizeToTray').checked,
+                notifySync: document.getElementById('settingsNotifySync').checked,
+                notifyIssues: document.getElementById('settingsNotifyIssues').checked,
+            };
+
+            try {
+                await ipcRenderer.invoke('save-settings', config);
+                closeModal('settingsModal');
+                addActivity('Settings saved successfully', 'success');
+            } catch (e) {
+                alert('Failed to save settings');
+            }
+        }
+
+        function minimizeWindow() {
+            ipcRenderer.invoke('window-minimize');
+        }
+
+        function maximizeWindow() {
+            ipcRenderer.invoke('window-maximize');
+        }
+
+        function closeWindow() {
+            ipcRenderer.invoke('window-close');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Large build artifacts
+desktop-agent/build/
+desktop-agent/release/
+desktop-agent/dist/
+desktop-agent/installer/
+desktop-agent/*.zip
+
+# Android build (can be regenerated with expo prebuild)
+mobile-app/android/
+
+# Lock files (optional - can be regenerated)
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+/build
+/dist
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Laravel
+/backend/storage/*.key
+/backend/bootstrap/cache/*
+
+# Expo
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Web build
+/web-dashboard/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Misc
+*.tmp
+*.temp
