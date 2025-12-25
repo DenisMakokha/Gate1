@@ -1311,6 +1311,32 @@
         </div>
     </div>
 
+    <!-- File Deletion Warning Modal (CRITICAL) -->
+    <div id="fileDeletionModal" class="modal-overlay">
+        <div class="modal" style="border: 2px solid var(--danger);">
+            <div class="modal-icon danger" style="background: var(--danger-light);">🚨</div>
+            <h3 class="modal-title" style="color: var(--danger);">⛔ FILE DELETED!</h3>
+            <p class="modal-desc">
+                <strong>This action is NOT allowed!</strong><br>
+                A video file has been deleted from the watched folder. Your group leader has been notified.
+            </p>
+            <div style="background: var(--danger-light); padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--danger);">
+                <div style="font-size: 12px; color: var(--danger); font-weight: 600; margin-bottom: 4px;">Deleted File:</div>
+                <div id="deletedFileName" style="font-family: monospace; font-size: 13px; color: var(--text-primary); word-break: break-all;"></div>
+            </div>
+            <div style="background: var(--bg-dark); padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Location:</div>
+                <div id="deletedFilePath" style="font-size: 12px; color: var(--text-secondary); word-break: break-all;"></div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; text-align: center;">
+                ⚠️ This incident has been logged and reported to your supervisor.
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" style="background: var(--danger); width: 100%;" onclick="closeModal('fileDeletionModal')">I Understand</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="modal-overlay">
         <div class="modal" style="max-width: 420px;">
@@ -1490,6 +1516,11 @@
                 "Perfect filename! '{filename}' ✓",
                 "Naming looks good! Synced ✓",
                 "Great format! File registered 👍",
+            ],
+            fileDeleted: [
+                "⚠️ ALERT! '{filename}' was DELETED! 🚨",
+                "Hold on! Someone deleted '{filename}'! 😱",
+                "File deletion detected! This is not allowed! ⛔",
             ],
             // Issue Reporting
             issueReported: [
@@ -2002,6 +2033,21 @@
 
         ipcRenderer.on('issue-resolved', (event, data) => {
             showMascotMessage('issueResolved', {}, 'success', 4000);
+        });
+
+        // File deletion event (CRITICAL - not allowed!)
+        ipcRenderer.on('file-deleted', (event, data) => {
+            addActivity(`⛔ FILE DELETED: ${data.name}`, 'error');
+            showMascotMessage('fileDeleted', { filename: data.name }, 'error', 10000);
+            
+            // Show deletion warning modal
+            document.getElementById('deletedFileName').textContent = data.name;
+            document.getElementById('deletedFilePath').textContent = data.folder;
+            document.getElementById('fileDeletionModal').classList.add('active');
+            
+            // Update issues count
+            const issues = parseInt(document.getElementById('issuesCount').textContent) + 1;
+            document.getElementById('issuesCount').textContent = issues;
         });
 
         async function bindSdCard() {

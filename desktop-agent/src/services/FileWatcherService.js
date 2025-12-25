@@ -149,9 +149,21 @@ class FileWatcherService extends EventEmitter {
                 removedAt: Date.now(),
             });
             
-            // Clean up after 2 seconds (renames happen quickly)
+            // Check after 2 seconds if this was a rename or actual deletion
             setTimeout(() => {
-                this.recentlyRemoved.delete(fileState.checksum);
+                const stillInRemoved = this.recentlyRemoved.get(fileState.checksum);
+                if (stillInRemoved) {
+                    // File was not renamed - this is a DELETION (flag it!)
+                    this.recentlyRemoved.delete(fileState.checksum);
+                    this.emit('file-deleted', {
+                        path: filePath,
+                        name: fileState.name,
+                        folder: fileState.folder,
+                        size: fileState.size,
+                        deletedAt: new Date().toISOString(),
+                    });
+                    console.log(`⚠️ FILE DELETED: ${fileState.name}`);
+                }
             }, 2000);
         }
         

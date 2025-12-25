@@ -168,6 +168,7 @@ async function initializeServices() {
     sdCardService.on('sd-removed', handleSDRemoved);
     fileWatcherService.on('file-renamed', handleFileRenamed);
     fileWatcherService.on('file-copied', handleFileCopied);
+    fileWatcherService.on('file-deleted', handleFileDeleted);
 
     // Start services if registered
     if (store.get('isRegistered')) {
@@ -386,6 +387,29 @@ function parseFilename(filename) {
     }
     
     return { status, issues, metadata };
+}
+
+async function handleFileDeleted(fileInfo) {
+    console.log('⚠️ File DELETED (not allowed!):', fileInfo);
+    
+    // Send to UI for warning
+    mainWindow.webContents.send('file-deleted', fileInfo);
+    mainWindow.show(); // Bring window to front for this serious issue
+    
+    // Report deletion as an issue to the server
+    try {
+        await apiService.reportIssue({
+            type: 'file_deleted',
+            severity: 'critical',
+            description: `File was deleted: ${fileInfo.name} from ${fileInfo.folder}`,
+            file_path: fileInfo.path,
+            file_name: fileInfo.name,
+            device_id: store.get('deviceId'),
+            agent_id: store.get('agentId'),
+        });
+    } catch (error) {
+        console.error('Failed to report file deletion:', error);
+    }
 }
 
 function syncNow() {
