@@ -900,6 +900,182 @@
         .quick-actions .btn {
             flex: 1;
         }
+
+        /* Mascot / Gigi Assistant */
+        .mascot-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .mascot-bubble {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 16px 16px 4px 16px;
+            padding: 12px 16px;
+            max-width: 220px;
+            box-shadow: var(--shadow);
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(10px) scale(0.9);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .mascot-bubble.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .mascot-bubble-text {
+            font-size: 13px;
+            line-height: 1.4;
+            color: var(--text-primary);
+        }
+
+        .mascot-bubble-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .mascot {
+            width: 56px;
+            height: 56px;
+            background: var(--card-gradient);
+            border: 2px solid var(--border-light);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: var(--shadow), 0 0 20px var(--primary-glow);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mascot:hover {
+            transform: scale(1.1);
+            box-shadow: var(--shadow), 0 0 30px var(--primary-glow);
+        }
+
+        .mascot::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            opacity: 0.1;
+            border-radius: 50%;
+        }
+
+        .mascot-face {
+            font-size: 28px;
+            z-index: 1;
+            transition: transform 0.3s ease;
+        }
+
+        /* Mascot States */
+        .mascot.idle .mascot-face { animation: mascotBlink 4s infinite; }
+        .mascot.working .mascot-face { animation: mascotWorking 1s infinite; }
+        .mascot.success .mascot-face { animation: mascotBounce 0.5s ease; }
+        .mascot.warning .mascot-face { animation: mascotShake 0.5s ease; }
+        .mascot.error .mascot-face { animation: mascotShake 0.3s ease infinite; }
+        .mascot.sleeping .mascot-face { animation: mascotSleep 2s ease infinite; }
+        .mascot.excited .mascot-face { animation: mascotExcited 0.6s ease; }
+
+        @keyframes mascotBlink {
+            0%, 90%, 100% { transform: scaleY(1); }
+            95% { transform: scaleY(0.1); }
+        }
+
+        @keyframes mascotWorking {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+
+        @keyframes mascotBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        @keyframes mascotShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+
+        @keyframes mascotSleep {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(2px); }
+        }
+
+        @keyframes mascotExcited {
+            0%, 100% { transform: scale(1) rotate(0); }
+            25% { transform: scale(1.1) rotate(-5deg); }
+            50% { transform: scale(1.2) rotate(5deg); }
+            75% { transform: scale(1.1) rotate(-5deg); }
+        }
+
+        /* Status ring around mascot */
+        .mascot-status-ring {
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--primary);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .mascot.working .mascot-status-ring {
+            opacity: 1;
+            animation: mascotRingSpin 1s linear infinite;
+        }
+
+        @keyframes mascotRingSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Online/Offline indicator on mascot */
+        .mascot-indicator {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--success);
+            border: 2px solid var(--bg-card);
+            z-index: 2;
+        }
+
+        .mascot-indicator.offline {
+            background: var(--danger);
+        }
+
+        .mascot-indicator.syncing {
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
@@ -1070,6 +1246,19 @@
         </div>
     </div>
 
+    <!-- Mascot / Gigi Assistant -->
+    <div class="mascot-container" id="mascotContainer">
+        <div class="mascot-bubble" id="mascotBubble">
+            <div class="mascot-bubble-text" id="mascotText">Hello! I'm Gigi, your assistant 👋</div>
+            <div class="mascot-bubble-hint" id="mascotHint"></div>
+        </div>
+        <div class="mascot idle" id="mascot" onclick="toggleMascotBubble()">
+            <div class="mascot-status-ring"></div>
+            <div class="mascot-face" id="mascotFace">😊</div>
+            <div class="mascot-indicator" id="mascotIndicator"></div>
+        </div>
+    </div>
+
     <!-- SD Card Binding Modal -->
     <div id="sdBindModal" class="modal-overlay">
         <div class="modal">
@@ -1227,6 +1416,276 @@
         let currentSdInfo = null;
         let currentSession = null;
         let currentTheme = 'dark';
+        let mascotBubbleTimeout = null;
+        let mascotIdleTimeout = null;
+        let lastActivityTime = Date.now();
+
+        // Mascot Messages Database
+        const mascotMessages = {
+            // Greetings
+            greeting: [
+                "Hello! I'm Gigi, your assistant 👋",
+                "Hey there! Ready to work? 😊",
+                "Good to see you! Let's do this 💪",
+            ],
+            // SD Card Events
+            sdInserted: [
+                "Ooh! SD card detected! Scanning... 🔍",
+                "New SD card! Let me check it out...",
+                "SD card inserted! Scanning for videos... 📹",
+            ],
+            sdRecognized: [
+                "Welcome back, Camera {camera}! 📷",
+                "I remember this one! Camera {camera}'s SD",
+                "Camera {camera} is ready to go! ✓",
+            ],
+            sdNew: [
+                "I don't recognize this SD card 🤔",
+                "New SD card! Let's set it up",
+                "First time seeing this card - quick setup needed!",
+            ],
+            sdBound: [
+                "Perfect! SD card registered ✓",
+                "All set! Camera {camera} is ready",
+                "Got it! This SD is now Camera {camera} 📷",
+            ],
+            sdSafeRemoval: [
+                "SD card ejected safely! Great work ✓",
+                "All done! SD removed successfully 👍",
+                "Perfect session! See you next time 👋",
+            ],
+            sdEarlyRemoval: [
+                "Wait! {count} files haven't been copied! 😰",
+                "Hold on! Still have {count} pending files!",
+                "Careful! {count} files not backed up yet ⚠️",
+            ],
+            // Session Events
+            sessionStarted: [
+                "Session started! Watching for copies... 👀",
+                "Tracking files now! Copy away 📂",
+                "Ready! I'll track your file copies",
+            ],
+            fileCopied: [
+                "Got one! {copied} of {total} files ✓",
+                "Nice! {copied}/{total} copied 📁",
+                "Keep going! {copied} files done",
+            ],
+            allFilesCopied: [
+                "All {total} files copied! Safe to eject ✓",
+                "Perfect! All files accounted for 🎉",
+                "Done! You can safely remove the SD card 👍",
+            ],
+            // Filename Issues
+            filenameIssue: [
+                "Hmm, '{filename}' looks off... 🤔",
+                "Quick check - this filename needs attention",
+                "Spotted a naming issue on '{filename}'",
+            ],
+            // Issue Reporting
+            issueReported: [
+                "Issue reported! Team notified 📨",
+                "Got it! Issue #{id} created",
+                "Flagged! Your leader will see this",
+            ],
+            issueResolved: [
+                "Issue resolved! Great teamwork 🎉",
+                "All fixed! Issue closed ✓",
+                "Problem solved! Nice work 👍",
+            ],
+            // Backup Events
+            backupStarted: [
+                "Backing up... keeping your work safe 💾",
+                "Creating backup copy... 🔄",
+                "Securing your footage...",
+            ],
+            backupComplete: [
+                "Backup complete! File is safe 🔒",
+                "Backed up successfully! ✓",
+                "Safe and sound on backup disk 💾",
+            ],
+            backupVerified: [
+                "Backup verified! 100% match ✓",
+                "Perfect copy confirmed! 🎯",
+                "Checksum matched - backup is solid!",
+            ],
+            backupFailed: [
+                "Backup verification failed 😰",
+                "Checksum mismatch - might need re-backup",
+                "Uh oh! Backup doesn't match original",
+            ],
+            // Connection Events
+            online: [
+                "Connected to server! 💚",
+                "We're online and ready!",
+                "Back in sync with Gate 1 ✓",
+            ],
+            offline: [
+                "Lost connection... working offline 📴",
+                "Server unreachable - still tracking locally",
+                "Offline mode - don't worry, I'm still here",
+            ],
+            reconnected: [
+                "Back online! Syncing data... ✓",
+                "Reconnected! Catching up now 😊",
+                "Connection restored! 💚",
+            ],
+            // Idle States
+            idle: [
+                "All quiet... I'm here if you need me 👀",
+                "Watching your folders... nothing new yet",
+                "Standing by... ready when you are",
+            ],
+            sleeping: [
+                "Zzz... just resting my eyes 😴",
+                "Taking a quick nap... 💤",
+                "Quiet time... wake me if needed",
+            ],
+            // Encouragement
+            milestone: [
+                "Wow! {count} files today! 🏆",
+                "Great progress! {count} files processed 💪",
+                "You're on fire! {count} files done ⭐",
+            ],
+            // Time-based
+            morning: [
+                "Good morning! Ready for a great day? ☀️",
+                "Rise and shine! Let's capture magic! 🌅",
+                "Morning! Fresh start, fresh footage!",
+            ],
+            evening: [
+                "Working late? I'm here with you 🌙",
+                "Evening shift? Let's finish strong!",
+                "Night owl mode activated 🦉",
+            ],
+        };
+
+        // Mascot Faces for different states
+        const mascotFaces = {
+            idle: '😊',
+            working: '🔄',
+            success: '🎉',
+            warning: '😟',
+            error: '😰',
+            sleeping: '😴',
+            excited: '🤩',
+            thinking: '🤔',
+            happy: '😄',
+        };
+
+        // Get random message from category
+        function getMascotMessage(category, replacements = {}) {
+            const messages = mascotMessages[category];
+            if (!messages || messages.length === 0) return '';
+            let message = messages[Math.floor(Math.random() * messages.length)];
+            for (const [key, value] of Object.entries(replacements)) {
+                message = message.replace(`{${key}}`, value);
+            }
+            return message;
+        }
+
+        // Show mascot message
+        function showMascotMessage(category, replacements = {}, state = 'idle', duration = 5000) {
+            const message = getMascotMessage(category, replacements);
+            if (!message) return;
+
+            const bubble = document.getElementById('mascotBubble');
+            const textEl = document.getElementById('mascotText');
+            const mascot = document.getElementById('mascot');
+            const face = document.getElementById('mascotFace');
+
+            // Update text
+            textEl.textContent = message;
+
+            // Update face and state
+            face.textContent = mascotFaces[state] || mascotFaces.idle;
+            mascot.className = `mascot ${state}`;
+
+            // Show bubble
+            bubble.classList.add('visible');
+
+            // Clear existing timeout
+            if (mascotBubbleTimeout) clearTimeout(mascotBubbleTimeout);
+
+            // Auto-hide after duration
+            mascotBubbleTimeout = setTimeout(() => {
+                bubble.classList.remove('visible');
+                // Return to idle after animation
+                setTimeout(() => {
+                    mascot.className = 'mascot idle';
+                    face.textContent = mascotFaces.idle;
+                }, 300);
+            }, duration);
+
+            // Reset idle timer
+            resetIdleTimer();
+        }
+
+        // Toggle bubble on mascot click
+        function toggleMascotBubble() {
+            const bubble = document.getElementById('mascotBubble');
+            if (bubble.classList.contains('visible')) {
+                bubble.classList.remove('visible');
+            } else {
+                showMascotMessage('greeting', {}, 'happy', 4000);
+            }
+        }
+
+        // Update mascot connection indicator
+        function updateMascotIndicator(status) {
+            const indicator = document.getElementById('mascotIndicator');
+            indicator.className = 'mascot-indicator';
+            if (status === 'offline') {
+                indicator.classList.add('offline');
+            } else if (status === 'syncing') {
+                indicator.classList.add('syncing');
+            }
+        }
+
+        // Reset idle timer
+        function resetIdleTimer() {
+            lastActivityTime = Date.now();
+            if (mascotIdleTimeout) clearTimeout(mascotIdleTimeout);
+            
+            // Check for idle after 5 minutes
+            mascotIdleTimeout = setTimeout(() => {
+                const bubble = document.getElementById('mascotBubble');
+                if (!bubble.classList.contains('visible')) {
+                    showMascotMessage('idle', {}, 'idle', 4000);
+                }
+            }, 5 * 60 * 1000);
+        }
+
+        // Check for sleeping state (10 minutes idle)
+        function checkSleepingState() {
+            const idleTime = Date.now() - lastActivityTime;
+            if (idleTime > 10 * 60 * 1000) {
+                const mascot = document.getElementById('mascot');
+                const face = document.getElementById('mascotFace');
+                mascot.className = 'mascot sleeping';
+                face.textContent = mascotFaces.sleeping;
+            }
+        }
+
+        // Initialize mascot with time-based greeting
+        function initMascot() {
+            const hour = new Date().getHours();
+            let greeting = 'greeting';
+            
+            if (hour >= 5 && hour < 12) {
+                greeting = 'morning';
+            } else if (hour >= 18 || hour < 5) {
+                greeting = 'evening';
+            }
+
+            // Show greeting after a short delay
+            setTimeout(() => {
+                showMascotMessage(greeting, {}, 'happy', 4000);
+            }, 1500);
+
+            // Start idle checker
+            setInterval(checkSleepingState, 60000);
+            resetIdleTimer();
+        }
 
         // Theme Management
         function initTheme() {
@@ -1350,6 +1809,9 @@
                 // Load sessions
                 const sessions = await ipcRenderer.invoke('get-active-sessions');
                 updateSessionsList(sessions || []);
+
+                // Initialize mascot
+                initMascot();
             } catch (e) {
                 console.error('Failed to load dashboard:', e);
             }
@@ -1414,25 +1876,33 @@
         // IPC Event Handlers
         ipcRenderer.on('sd-inserted', (event, sdInfo) => {
             addActivity(`SD card detected: ${sdInfo.fileCount} files`, 'info');
+            showMascotMessage('sdInserted', {}, 'excited', 4000);
+            updateMascotIndicator('syncing');
         });
 
         ipcRenderer.on('sd-new', (event, sdInfo) => {
             currentSdInfo = sdInfo;
             document.getElementById('sdBindModal').classList.add('active');
+            showMascotMessage('sdNew', {}, 'thinking', 5000);
         });
 
         ipcRenderer.on('sd-recognized', (event, sdCard) => {
             addActivity(`Camera ${sdCard.camera_number}${sdCard.sd_label} connected`, 'success');
+            showMascotMessage('sdRecognized', { camera: `${sdCard.camera_number}${sdCard.sd_label || ''}` }, 'success', 4000);
+            showMascotMessage('sessionStarted', {}, 'working', 4000);
+            updateMascotIndicator('online');
         });
 
         ipcRenderer.on('sd-early-removal', (event, data) => {
             currentSession = data.session;
             document.getElementById('pendingFilesCount').textContent = data.pendingFiles;
             document.getElementById('earlyRemovalModal').classList.add('active');
+            showMascotMessage('sdEarlyRemoval', { count: data.pendingFiles }, 'error', 6000);
         });
 
         ipcRenderer.on('sd-safe-removal', (event, session) => {
             addActivity(`Camera ${session.cameraNumber}${session.sdLabel} safely removed`, 'success');
+            showMascotMessage('sdSafeRemoval', {}, 'success', 4000);
         });
 
         ipcRenderer.on('file-renamed', (event, data) => {
@@ -1444,6 +1914,7 @@
                     data.parseResult.issues?.map(i => i.message).join(', ') || 'Invalid filename format';
                 document.getElementById('filenameIssueModal').classList.add('active');
                 addActivity(`Filename issue: ${data.newName}`, 'warning');
+                showMascotMessage('filenameIssue', { filename: data.newName }, 'warning', 5000);
                 
                 const issues = parseInt(document.getElementById('issuesCount').textContent) + 1;
                 document.getElementById('issuesCount').textContent = issues;
@@ -1453,7 +1924,65 @@
         });
 
         ipcRenderer.on('file-copied', (event, data) => {
-            ipcRenderer.invoke('get-active-sessions').then(updateSessionsList);
+            ipcRenderer.invoke('get-active-sessions').then(sessions => {
+                updateSessionsList(sessions);
+                // Show progress message occasionally (not every file)
+                if (sessions && sessions.length > 0) {
+                    const session = sessions[0];
+                    const copied = session.filesCopied;
+                    const total = session.filesDetected;
+                    
+                    // Show message at milestones: first file, every 10 files, last file
+                    if (copied === 1 || copied % 10 === 0 || copied === total) {
+                        if (copied === total) {
+                            showMascotMessage('allFilesCopied', { total }, 'success', 5000);
+                        } else {
+                            showMascotMessage('fileCopied', { copied, total }, 'working', 3000);
+                        }
+                    }
+                }
+            });
+        });
+
+        // Connection status events
+        ipcRenderer.on('connection-online', () => {
+            updateMascotIndicator('online');
+            showMascotMessage('online', {}, 'success', 3000);
+            document.getElementById('statusIndicator').className = 'status-indicator online';
+        });
+
+        ipcRenderer.on('connection-offline', () => {
+            updateMascotIndicator('offline');
+            showMascotMessage('offline', {}, 'warning', 4000);
+            document.getElementById('statusIndicator').className = 'status-indicator offline';
+        });
+
+        // Backup events
+        ipcRenderer.on('backup-started', (event, data) => {
+            showMascotMessage('backupStarted', {}, 'working', 3000);
+            updateMascotIndicator('syncing');
+        });
+
+        ipcRenderer.on('backup-complete', (event, data) => {
+            showMascotMessage('backupComplete', {}, 'success', 4000);
+            updateMascotIndicator('online');
+        });
+
+        ipcRenderer.on('backup-verified', (event, data) => {
+            showMascotMessage('backupVerified', {}, 'success', 4000);
+        });
+
+        ipcRenderer.on('backup-failed', (event, data) => {
+            showMascotMessage('backupFailed', {}, 'error', 5000);
+        });
+
+        // Issue events
+        ipcRenderer.on('issue-reported', (event, data) => {
+            showMascotMessage('issueReported', { id: data.issue_id }, 'success', 4000);
+        });
+
+        ipcRenderer.on('issue-resolved', (event, data) => {
+            showMascotMessage('issueResolved', {}, 'success', 4000);
         });
 
         async function bindSdCard() {
@@ -1476,6 +2005,7 @@
 
                 closeModal('sdBindModal');
                 addActivity(`Camera ${cameraNumber}${sdLabel.toUpperCase()} registered`, 'success');
+                showMascotMessage('sdBound', { camera: `${cameraNumber}${sdLabel.toUpperCase()}` }, 'success', 4000);
                 document.getElementById('cameraNumber').value = '';
                 document.getElementById('sdLabel').value = '';
             } catch (error) {
@@ -1488,6 +2018,7 @@
                 await ipcRenderer.invoke('confirm-early-removal', currentSession?.sessionId, 'early_confirmed');
                 closeModal('earlyRemovalModal');
                 addActivity('Early removal confirmed - leader notified', 'warning');
+                showMascotMessage('sdEarlyRemoval', { count: currentSession?.filesPending || 0 }, 'warning', 4000);
             } catch (error) {
                 console.error('Failed to confirm early removal:', error);
             }
