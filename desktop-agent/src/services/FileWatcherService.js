@@ -11,6 +11,7 @@ class FileWatcherService extends EventEmitter {
         this.watchers = [];
         this.fileStates = new Map();
         this.copyOperations = new Map();
+        this.recentlyRemoved = new Map(); // Track removed files for rename detection
     }
 
     async start() {
@@ -79,6 +80,21 @@ class FileWatcherService extends EventEmitter {
             modifiedAt: stats.mtime,
         };
 
+        // Check if this is a rename (file with same checksum was recently removed)
+        const renameSource = this.detectRename(fileInfo);
+        if (renameSource) {
+            // This is a rename operation
+            this.fileStates.set(filePath, fileInfo);
+            this.emit('file-renamed', {
+                ...fileInfo,
+                oldName: renameSource.name,
+                oldPath: renameSource.path,
+                newName: fileInfo.name,
+            });
+            console.log(`File renamed: ${renameSource.name} -> ${fileInfo.name}`);
+            return;
+        }
+
         this.fileStates.set(filePath, fileInfo);
 
         // Check if this is a copy operation (file came from SD card)
@@ -124,8 +140,44 @@ class FileWatcherService extends EventEmitter {
     }
 
     handleFileRemoved(filePath) {
+        const fileState = this.fileStates.get(filePath);
+        
+        // Store removed file info for rename detection
+        if (fileState) {
+            this.recentlyRemoved.set(fileState.checksum, {
+                ...fileState,
+                removedAt: Date.now(),
+            });
+            
+            // Clean up after 2 seconds (renames happen quickly)
+            setTimeout(() => {
+                this.recentlyRemoved.delete(fileState.checksum);
+            }, 2000);
+        }
+        
         this.fileStates.delete(filePath);
         this.emit('file-removed', { path: filePath });
+    }
+
+    detectRename(newFileInfo) {
+        // Check if a file with same size was recently removed (within 2 seconds)
+        // We use size first for quick check, then verify with checksum
+        for (const [checksum, removedFile] of this.recentlyRemoved) {
+            const timeSinceRemoval = Date.now() - removedFile.removedAt;
+            
+            // Must be within 2 seconds and same size
+            if (timeSinceRemoval < 2000 && removedFile.size === newFileInfo.size) {
+                // Same folder = likely a rename
+                if (removedFile.folder === newFileInfo.folder) {
+                    // Verify checksum matches
+                    if (checksum === newFileInfo.checksum) {
+                        this.recentlyRemoved.delete(checksum);
+                        return removedFile;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     detectCopyOperation(fileInfo) {

@@ -1475,11 +1475,21 @@
                 "Perfect! All files accounted for 🎉",
                 "Done! You can safely remove the SD card 👍",
             ],
-            // Filename Issues
+            // Filename Events
+            fileRenamed: [
+                "File renamed! Checking format... 🔍",
+                "Got it! Validating '{filename}'...",
+                "Rename detected - verifying... ✓",
+            ],
             filenameIssue: [
                 "Hmm, '{filename}' looks off... 🤔",
                 "Quick check - this filename needs attention",
                 "Spotted a naming issue on '{filename}'",
+            ],
+            filenameValid: [
+                "Perfect filename! '{filename}' ✓",
+                "Naming looks good! Synced ✓",
+                "Great format! File registered 👍",
             ],
             // Issue Reporting
             issueReported: [
@@ -1909,6 +1919,11 @@
             const synced = parseInt(document.getElementById('filesSynced').textContent) + 1;
             document.getElementById('filesSynced').textContent = synced;
 
+            // Show rename detected message first
+            if (data.oldName && data.newName && data.oldName !== data.newName) {
+                addActivity(`Renamed: ${data.oldName} → ${data.newName}`, 'info');
+            }
+
             if (data.parseResult?.status === 'error') {
                 document.getElementById('issueDetails').textContent = 
                     data.parseResult.issues?.map(i => i.message).join(', ') || 'Invalid filename format';
@@ -1920,6 +1935,10 @@
                 document.getElementById('issuesCount').textContent = issues;
             } else {
                 addActivity(`Synced: ${data.newName}`, 'success');
+                // Show success message occasionally (not every file to avoid spam)
+                if (synced % 5 === 0 || synced === 1) {
+                    showMascotMessage('filenameValid', { filename: data.newName }, 'success', 3000);
+                }
             }
         });
 
