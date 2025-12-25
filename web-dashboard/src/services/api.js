@@ -45,6 +45,12 @@ export const dashboardService = {
   getBackup: () => api.get('/dashboard/backup'),
   getEditor: () => api.get('/dashboard/editor'),
   getWorkflowProgress: (eventId) => api.get('/dashboard/workflow-progress', { params: { event_id: eventId } }),
+  getTimeAnalytics: (eventId) => api.get('/dashboard/time-analytics', { params: { event_id: eventId } }),
+  getIncidents: (eventId, days) => api.get('/dashboard/incidents', { params: { event_id: eventId, days } }),
+  getSdCardLifecycle: (eventId) => api.get('/dashboard/sd-card-lifecycle', { params: { event_id: eventId } }),
+  getComparative: (eventId) => api.get('/dashboard/comparative', { params: { event_id: eventId } }),
+  getPredictive: (eventId) => api.get('/dashboard/predictive', { params: { event_id: eventId } }),
+  getAlerts: (eventId) => api.get('/dashboard/alerts', { params: { event_id: eventId } }),
 };
 
 export const eventService = {
@@ -169,6 +175,33 @@ export const exportService = {
   exportIssues: (params) => api.get('/export/issues', { params, responseType: 'blob' }),
   exportAuditLogs: (params) => api.get('/export/audit-logs', { params, responseType: 'blob' }),
   exportHealingCases: (params) => api.get('/export/healing-cases', { params, responseType: 'blob' }),
+};
+
+export const qualityControlService = {
+  getDashboard: (eventId) => api.get('/quality-control/dashboard', { params: { event_id: eventId } }),
+  getQueue: (params) => api.get('/quality-control/queue', { params }),
+  submit: (mediaId, data) => api.post(`/quality-control/${mediaId}/submit`, data),
+  getHistory: (mediaId) => api.get(`/quality-control/${mediaId}/history`),
+  getStats: (params) => api.get('/quality-control/stats', { params }),
+};
+
+export const storageForecastService = {
+  getForecast: (params) => api.get('/storage/forecast', { params }),
+  getUsage: () => api.get('/storage/usage'),
+  getDisks: () => api.get('/storage/disks'),
+};
+
+export const storageService = {
+  getForecast: (params) => api.get('/storage/forecast', { params }),
+  getUsage: () => api.get('/storage/usage'),
+  getDisks: () => api.get('/storage/disks'),
+};
+
+export const mediaDeletionService = {
+  getPending: (params) => api.get('/media-deletion/pending', { params }),
+  request: (mediaId, reason) => api.post(`/media-deletion/${mediaId}/request`, { reason }),
+  approve: (requestId) => api.post(`/media-deletion/${requestId}/approve`),
+  reject: (requestId, reason) => api.post(`/media-deletion/${requestId}/reject`, { reason }),
 };
 
 export default api;

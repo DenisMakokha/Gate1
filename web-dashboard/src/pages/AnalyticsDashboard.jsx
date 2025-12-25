@@ -20,7 +20,7 @@ import {
   BarChart3,
   Timer,
   Trash2,
-  Eject,
+  Usb,
   FileWarning,
   Circle,
 } from 'lucide-react';
@@ -537,7 +537,7 @@ export default function AnalyticsDashboard() {
             {/* Early Removals */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="p-4 border-b border-gray-100 flex items-center gap-2">
-                <Eject className="w-5 h-5 text-amber-500" />
+                <Usb className="w-5 h-5 text-amber-500" />
                 <h3 className="font-semibold text-gray-900">Early SD Removals</h3>
               </div>
               <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
