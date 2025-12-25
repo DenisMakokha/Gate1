@@ -24,6 +24,7 @@ import BackupAnalytics from './pages/BackupAnalytics';
 import QualityControl from './pages/QualityControl';
 import StorageForecast from './pages/StorageForecast';
 import DataProtection from './pages/DataProtection';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 
 function PrivateRoute({ children, roles }) {
   const { user, loading, hasAnyRole } = useAuth();
@@ -162,6 +163,12 @@ function App() {
           <Route path="/data-protection" element={
             <PrivateRoute roles={['admin']}>
               <DataProtection />
+            </PrivateRoute>
+          } />
+          
+          <Route path="/analytics-dashboard" element={
+            <PrivateRoute roles={['admin', 'group-leader']}>
+              <AnalyticsDashboard />
             </PrivateRoute>
           } />
           

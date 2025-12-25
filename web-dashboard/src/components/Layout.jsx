@@ -37,6 +37,7 @@ export default function Layout({ children }) {
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['admin', 'group-leader', 'qa', 'backup', 'editor'] },
+    { name: '360° Analytics', href: '/analytics-dashboard', icon: BarChart3, roles: ['admin', 'group-leader'] },
     { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['admin'] },
     { name: 'Events', href: '/events', icon: Calendar, roles: ['admin'] },
     { name: 'Groups', href: '/groups', icon: Users, roles: ['admin', 'group-leader'] },

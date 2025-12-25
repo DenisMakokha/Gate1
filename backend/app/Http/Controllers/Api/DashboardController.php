@@ -680,6 +680,747 @@ class DashboardController extends Controller
     }
 
     /**
+     * Time-Based Analytics - Processing speed, efficiency, bottlenecks
+     */
+    public function timeAnalytics(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+
+        // Determine scope based on user role
+        if ($user->isAdmin()) {
+            $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
+        } else {
+            $groupIds = $user->ledGroups()->pluck('id')->toArray();
+            $editorIds = User::whereHas('groups', fn($q) => $q->whereIn('groups.id', $groupIds))->pluck('id')->toArray();
+        }
+
+        // Average session duration
+        $completedSessions = CameraSession::where('status', 'completed')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->whereNotNull('ended_at')
+            ->get();
+
+        $avgSessionMinutes = $completedSessions->count() > 0
+            ? $completedSessions->avg(fn($s) => $s->started_at->diffInMinutes($s->ended_at))
+            : 0;
+
+        // Average files per session
+        $avgFilesPerSession = $completedSessions->avg('files_detected') ?? 0;
+
+        // Files processed per hour (last 24 hours)
+        $last24Hours = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('created_at', '>=', now()->subHours(24))
+            ->count();
+        $filesPerHour = round($last24Hours / 24, 1);
+
+        // Editor efficiency (files per hour per editor)
+        $editorEfficiency = User::whereIn('id', $editorIds)
+            ->get()
+            ->map(function ($editor) use ($eventId) {
+                $filesLast8Hours = Media::where('editor_id', $editor->id)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->where('created_at', '>=', now()->subHours(8))
+                    ->count();
+                
+                $sessionsLast8Hours = CameraSession::where('editor_id', $editor->id)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->where('created_at', '>=', now()->subHours(8))
+                    ->count();
+
+                return [
+                    'id' => $editor->id,
+                    'name' => $editor->name,
+                    'files_last_8h' => $filesLast8Hours,
+                    'sessions_last_8h' => $sessionsLast8Hours,
+                    'files_per_hour' => round($filesLast8Hours / 8, 1),
+                    'is_online' => $editor->is_online && $editor->last_seen_at?->gte(now()->subMinutes(5)),
+                ];
+            })
+            ->sortByDesc('files_per_hour')
+            ->values();
+
+        // Hourly breakdown (last 12 hours)
+        $hourlyBreakdown = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $hourStart = now()->subHours($i)->startOfHour();
+            $hourEnd = now()->subHours($i)->endOfHour();
+            
+            $filesCount = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+                ->whereIn('editor_id', $editorIds)
+                ->whereBetween('created_at', [$hourStart, $hourEnd])
+                ->count();
+
+            $hourlyBreakdown[] = [
+                'hour' => $hourStart->format('H:i'),
+                'files' => $filesCount,
+            ];
+        }
+
+        // Peak hours analysis (which hours have most activity)
+        $peakHours = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('created_at', '>=', now()->subDays(7))
+            ->selectRaw('HOUR(created_at) as hour, COUNT(*) as count')
+            ->groupBy('hour')
+            ->orderByDesc('count')
+            ->limit(5)
+            ->get()
+            ->map(fn($r) => [
+                'hour' => sprintf('%02d:00', $r->hour),
+                'avg_files' => round($r->count / 7, 1),
+            ]);
+
+        // Bottleneck detection - sessions with slow progress
+        $slowSessions = CameraSession::where('status', 'active')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('started_at', '<', now()->subMinutes(30))
+            ->whereColumn('files_copied', '<', 'files_detected')
+            ->with(['editor', 'sdCard'])
+            ->get()
+            ->map(fn($s) => [
+                'session_id' => $s->session_id,
+                'editor' => $s->editor->name,
+                'camera' => $s->camera_number,
+                'files_detected' => $s->files_detected,
+                'files_copied' => $s->files_copied,
+                'progress' => $s->copy_progress,
+                'duration_minutes' => $s->started_at->diffInMinutes(now()),
+                'status' => $s->copy_progress < 50 ? 'critical' : 'warning',
+            ]);
+
+        return response()->json([
+            'summary' => [
+                'avg_session_minutes' => round($avgSessionMinutes, 1),
+                'avg_files_per_session' => round($avgFilesPerSession, 1),
+                'files_per_hour_24h' => $filesPerHour,
+                'total_files_24h' => $last24Hours,
+            ],
+            'editor_efficiency' => $editorEfficiency,
+            'hourly_breakdown' => $hourlyBreakdown,
+            'peak_hours' => $peakHours,
+            'bottlenecks' => $slowSessions,
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Incident Dashboard - Deletions, violations, policy breaches
+     */
+    public function incidents(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+        $days = $request->get('days', 7);
+
+        // Determine scope
+        if ($user->isAdmin()) {
+            $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
+        } else {
+            $groupIds = $user->ledGroups()->pluck('id')->toArray();
+            $editorIds = User::whereHas('groups', fn($q) => $q->whereIn('groups.id', $groupIds))->pluck('id')->toArray();
+        }
+
+        // File deletions (from audit log)
+        $deletions = AuditLog::where('action', 'like', '%delete%')
+            ->where('created_at', '>=', now()->subDays($days))
+            ->whereIn('user_id', $editorIds)
+            ->with('user')
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get()
+            ->map(fn($log) => [
+                'id' => $log->id,
+                'user' => $log->user?->name ?? 'Unknown',
+                'user_id' => $log->user_id,
+                'action' => $log->action,
+                'details' => $log->details,
+                'created_at' => $log->created_at->toIso8601String(),
+                'severity' => 'critical',
+            ]);
+
+        // Early SD removals
+        $earlyRemovals = CameraSession::where('removal_decision', 'early_confirmed')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('ended_at', '>=', now()->subDays($days))
+            ->with(['editor', 'event'])
+            ->orderByDesc('ended_at')
+            ->limit(50)
+            ->get()
+            ->map(fn($s) => [
+                'id' => $s->id,
+                'session_id' => $s->session_id,
+                'user' => $s->editor->name,
+                'user_id' => $s->editor_id,
+                'event' => $s->event?->name,
+                'camera' => $s->camera_number,
+                'files_pending' => $s->files_pending,
+                'created_at' => $s->ended_at->toIso8601String(),
+                'severity' => $s->files_pending > 10 ? 'critical' : 'warning',
+            ]);
+
+        // Filename issues
+        $filenameIssues = Issue::where('type', 'filename_error')
+            ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
+            ->whereHas('reporter', fn($q) => $q->whereIn('id', $editorIds))
+            ->where('created_at', '>=', now()->subDays($days))
+            ->with(['reporter', 'media'])
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get()
+            ->map(fn($i) => [
+                'id' => $i->id,
+                'issue_id' => $i->issue_id,
+                'user' => $i->reporter?->name,
+                'user_id' => $i->reported_by,
+                'filename' => $i->media?->filename,
+                'description' => $i->description,
+                'status' => $i->status,
+                'created_at' => $i->created_at->toIso8601String(),
+                'severity' => 'low',
+            ]);
+
+        // Repeat offenders (users with multiple incidents)
+        $allIncidentUserIds = collect()
+            ->merge($deletions->pluck('user_id'))
+            ->merge($earlyRemovals->pluck('user_id'))
+            ->countBy()
+            ->filter(fn($count) => $count >= 2)
+            ->keys();
+
+        $repeatOffenders = User::whereIn('id', $allIncidentUserIds)
+            ->get()
+            ->map(function ($user) use ($deletions, $earlyRemovals, $filenameIssues) {
+                $userDeletions = $deletions->where('user_id', $user->id)->count();
+                $userEarlyRemovals = $earlyRemovals->where('user_id', $user->id)->count();
+                $userFilenameIssues = $filenameIssues->where('user_id', $user->id)->count();
+                
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'deletions' => $userDeletions,
+                    'early_removals' => $userEarlyRemovals,
+                    'filename_issues' => $userFilenameIssues,
+                    'total_incidents' => $userDeletions + $userEarlyRemovals + $userFilenameIssues,
+                ];
+            })
+            ->sortByDesc('total_incidents')
+            ->values();
+
+        // Summary counts
+        $summary = [
+            'total_incidents' => $deletions->count() + $earlyRemovals->count() + $filenameIssues->count(),
+            'deletions' => $deletions->count(),
+            'early_removals' => $earlyRemovals->count(),
+            'filename_issues' => $filenameIssues->count(),
+            'critical_count' => $deletions->count() + $earlyRemovals->where('severity', 'critical')->count(),
+            'repeat_offenders' => $repeatOffenders->count(),
+        ];
+
+        return response()->json([
+            'summary' => $summary,
+            'deletions' => $deletions,
+            'early_removals' => $earlyRemovals,
+            'filename_issues' => $filenameIssues,
+            'repeat_offenders' => $repeatOffenders,
+            'period_days' => $days,
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * SD Card Lifecycle - Usage, health, turnaround
+     */
+    public function sdCardLifecycle(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+
+        // All SD cards with usage stats
+        $sdCards = \App\Models\SdCard::withCount([
+            'sessions',
+            'sessions as active_sessions_count' => fn($q) => $q->where('status', 'active'),
+            'sessions as completed_sessions_count' => fn($q) => $q->where('status', 'completed'),
+            'sessions as early_removal_count' => fn($q) => $q->where('removal_decision', 'early_confirmed'),
+        ])
+        ->with(['sessions' => fn($q) => $q->latest()->limit(1)])
+        ->get()
+        ->map(function ($sd) {
+            $lastSession = $sd->sessions->first();
+            $avgSessionDuration = CameraSession::where('sd_card_id', $sd->id)
+                ->where('status', 'completed')
+                ->whereNotNull('ended_at')
+                ->get()
+                ->avg(fn($s) => $s->started_at->diffInMinutes($s->ended_at));
+
+            $totalFilesProcessed = CameraSession::where('sd_card_id', $sd->id)
+                ->sum('files_copied');
+
+            return [
+                'id' => $sd->id,
+                'hardware_id' => $sd->hardware_id,
+                'camera_number' => $sd->camera_number,
+                'sd_label' => $sd->sd_label,
+                'total_sessions' => $sd->sessions_count,
+                'completed_sessions' => $sd->completed_sessions_count,
+                'active_sessions' => $sd->active_sessions_count,
+                'early_removals' => $sd->early_removal_count,
+                'reliability_score' => $sd->sessions_count > 0 
+                    ? round((1 - ($sd->early_removal_count / $sd->sessions_count)) * 100, 1) 
+                    : 100,
+                'total_files_processed' => $totalFilesProcessed,
+                'avg_session_minutes' => round($avgSessionDuration ?? 0, 1),
+                'last_used' => $lastSession?->started_at?->toIso8601String(),
+                'status' => $sd->active_sessions_count > 0 ? 'in_use' : 'available',
+            ];
+        })
+        ->sortByDesc('total_sessions')
+        ->values();
+
+        // Cards with issues (high early removal rate)
+        $problematicCards = $sdCards->filter(fn($sd) => $sd['reliability_score'] < 80 && $sd['total_sessions'] >= 3);
+
+        // Currently in use
+        $inUseCards = $sdCards->where('status', 'in_use');
+
+        // Summary
+        $summary = [
+            'total_cards' => $sdCards->count(),
+            'in_use' => $inUseCards->count(),
+            'available' => $sdCards->where('status', 'available')->count(),
+            'problematic' => $problematicCards->count(),
+            'total_sessions_all_time' => $sdCards->sum('total_sessions'),
+            'avg_reliability' => round($sdCards->avg('reliability_score'), 1),
+        ];
+
+        return response()->json([
+            'summary' => $summary,
+            'cards' => $sdCards,
+            'problematic_cards' => $problematicCards->values(),
+            'in_use' => $inUseCards->values(),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Comparative Analytics - Leaderboard, comparisons
+     */
+    public function comparativeAnalytics(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+
+        // Determine scope
+        if ($user->isAdmin()) {
+            $groupIds = Group::pluck('id')->toArray();
+            $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
+        } else {
+            $groupIds = $user->ledGroups()->pluck('id')->toArray();
+            $editorIds = User::whereHas('groups', fn($q) => $q->whereIn('groups.id', $groupIds))->pluck('id')->toArray();
+        }
+
+        // Editor Leaderboard (by files processed today)
+        $editorLeaderboard = User::whereIn('id', $editorIds)
+            ->get()
+            ->map(function ($editor) use ($eventId) {
+                $filesToday = Media::where('editor_id', $editor->id)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->whereDate('created_at', today())
+                    ->count();
+                $filesYesterday = Media::where('editor_id', $editor->id)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->whereDate('created_at', today()->subDay())
+                    ->count();
+                $filesThisWeek = Media::where('editor_id', $editor->id)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->where('created_at', '>=', now()->startOfWeek())
+                    ->count();
+
+                return [
+                    'id' => $editor->id,
+                    'name' => $editor->name,
+                    'files_today' => $filesToday,
+                    'files_yesterday' => $filesYesterday,
+                    'files_this_week' => $filesThisWeek,
+                    'trend' => $filesToday > $filesYesterday ? 'up' : ($filesToday < $filesYesterday ? 'down' : 'same'),
+                    'change_percent' => $filesYesterday > 0 
+                        ? round((($filesToday - $filesYesterday) / $filesYesterday) * 100, 1) 
+                        : 0,
+                ];
+            })
+            ->sortByDesc('files_today')
+            ->values()
+            ->take(20);
+
+        // Group Comparison
+        $groupComparison = Group::whereIn('id', $groupIds)
+            ->with('members')
+            ->get()
+            ->map(function ($group) use ($eventId) {
+                $memberIds = $group->members->pluck('id')->toArray();
+                
+                $filesToday = Media::whereIn('editor_id', $memberIds)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->whereDate('created_at', today())
+                    ->count();
+                $filesYesterday = Media::whereIn('editor_id', $memberIds)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->whereDate('created_at', today()->subDay())
+                    ->count();
+                $filesThisWeek = Media::whereIn('editor_id', $memberIds)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->where('created_at', '>=', now()->startOfWeek())
+                    ->count();
+
+                $backupsComplete = Media::whereIn('editor_id', $memberIds)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->whereHas('backups', fn($q) => $q->where('is_verified', true))
+                    ->count();
+                $totalMedia = Media::whereIn('editor_id', $memberIds)
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->count();
+
+                return [
+                    'id' => $group->id,
+                    'group_code' => $group->group_code,
+                    'name' => $group->name,
+                    'member_count' => count($memberIds),
+                    'files_today' => $filesToday,
+                    'files_yesterday' => $filesYesterday,
+                    'files_this_week' => $filesThisWeek,
+                    'backup_percentage' => $totalMedia > 0 ? round(($backupsComplete / $totalMedia) * 100, 1) : 0,
+                    'trend' => $filesToday > $filesYesterday ? 'up' : ($filesToday < $filesYesterday ? 'down' : 'same'),
+                ];
+            })
+            ->sortByDesc('files_today')
+            ->values();
+
+        // Day-over-day comparison
+        $dayComparison = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = today()->subDays($i);
+            $filesCount = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+                ->whereIn('editor_id', $editorIds)
+                ->whereDate('created_at', $date)
+                ->count();
+            $backupsCount = Backup::whereHas('media', function ($q) use ($eventId, $editorIds, $date) {
+                $q->when($eventId, fn($q2) => $q2->where('event_id', $eventId))
+                    ->whereIn('editor_id', $editorIds)
+                    ->whereDate('created_at', $date);
+            })->count();
+
+            $dayComparison[] = [
+                'date' => $date->format('Y-m-d'),
+                'day' => $date->format('D'),
+                'files' => $filesCount,
+                'backups' => $backupsCount,
+            ];
+        }
+
+        return response()->json([
+            'editor_leaderboard' => $editorLeaderboard,
+            'group_comparison' => $groupComparison,
+            'day_comparison' => $dayComparison,
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Predictive/Planning Metrics - ETA, workload distribution
+     */
+    public function predictiveMetrics(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+
+        // Determine scope
+        if ($user->isAdmin()) {
+            $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
+        } else {
+            $groupIds = $user->ledGroups()->pluck('id')->toArray();
+            $editorIds = User::whereHas('groups', fn($q) => $q->whereIn('groups.id', $groupIds))->pluck('id')->toArray();
+        }
+
+        // Current pending work
+        $pendingCopies = CameraSession::where('status', 'active')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->sum('files_pending');
+
+        $pendingBackups = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->whereDoesntHave('backups')
+            ->count();
+
+        $pendingVerification = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->whereHas('backups', fn($q) => $q->where('is_verified', false))
+            ->count();
+
+        // Processing rate (files per hour, last 4 hours)
+        $filesLast4Hours = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('created_at', '>=', now()->subHours(4))
+            ->count();
+        $processingRate = $filesLast4Hours / 4;
+
+        // ETA calculations
+        $etaCopiesMinutes = $processingRate > 0 ? round(($pendingCopies / $processingRate) * 60) : null;
+        $etaBackupsMinutes = $processingRate > 0 ? round(($pendingBackups / $processingRate) * 60) : null;
+
+        // Workload distribution
+        $onlineEditors = User::whereIn('id', $editorIds)
+            ->where('is_online', true)
+            ->where('last_seen_at', '>=', now()->subMinutes(5))
+            ->count();
+
+        $workloadPerEditor = $onlineEditors > 0 
+            ? round(($pendingCopies + $pendingBackups) / $onlineEditors, 1) 
+            : null;
+
+        // Resource recommendation
+        $recommendedEditors = $processingRate > 0 
+            ? ceil(($pendingCopies + $pendingBackups) / ($processingRate * 2)) // Target 2 hours completion
+            : null;
+
+        $resourceStatus = 'optimal';
+        if ($onlineEditors < $recommendedEditors) {
+            $resourceStatus = 'understaffed';
+        } elseif ($onlineEditors > $recommendedEditors * 1.5) {
+            $resourceStatus = 'overstaffed';
+        }
+
+        // Workload by editor
+        $editorWorkload = User::whereIn('id', $editorIds)
+            ->get()
+            ->map(function ($editor) use ($eventId) {
+                $activeSessions = CameraSession::where('editor_id', $editor->id)
+                    ->where('status', 'active')
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->sum('files_pending');
+                
+                $isOnline = $editor->is_online && $editor->last_seen_at?->gte(now()->subMinutes(5));
+
+                return [
+                    'id' => $editor->id,
+                    'name' => $editor->name,
+                    'is_online' => $isOnline,
+                    'pending_files' => $activeSessions,
+                    'status' => !$isOnline ? 'offline' : ($activeSessions > 50 ? 'overloaded' : ($activeSessions > 0 ? 'busy' : 'available')),
+                ];
+            })
+            ->sortByDesc('pending_files')
+            ->values();
+
+        return response()->json([
+            'pending_work' => [
+                'copies' => $pendingCopies,
+                'backups' => $pendingBackups,
+                'verification' => $pendingVerification,
+                'total' => $pendingCopies + $pendingBackups + $pendingVerification,
+            ],
+            'processing_rate' => [
+                'files_per_hour' => round($processingRate, 1),
+                'files_last_4h' => $filesLast4Hours,
+            ],
+            'eta' => [
+                'copies_minutes' => $etaCopiesMinutes,
+                'copies_formatted' => $etaCopiesMinutes ? $this->formatMinutes($etaCopiesMinutes) : 'N/A',
+                'backups_minutes' => $etaBackupsMinutes,
+                'backups_formatted' => $etaBackupsMinutes ? $this->formatMinutes($etaBackupsMinutes) : 'N/A',
+            ],
+            'resources' => [
+                'online_editors' => $onlineEditors,
+                'recommended_editors' => $recommendedEditors,
+                'workload_per_editor' => $workloadPerEditor,
+                'status' => $resourceStatus,
+            ],
+            'editor_workload' => $editorWorkload,
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Real-time Alerts Dashboard
+     */
+    public function alerts(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+
+        // Determine scope
+        if ($user->isAdmin()) {
+            $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
+        } else {
+            $groupIds = $user->ledGroups()->pluck('id')->toArray();
+            $editorIds = User::whereHas('groups', fn($q) => $q->whereIn('groups.id', $groupIds))->pluck('id')->toArray();
+        }
+
+        $alerts = collect();
+
+        // Critical: File deletions (last 24h)
+        $deletions = AuditLog::where('action', 'like', '%delete%')
+            ->where('created_at', '>=', now()->subHours(24))
+            ->whereIn('user_id', $editorIds)
+            ->with('user')
+            ->get()
+            ->map(fn($log) => [
+                'type' => 'deletion',
+                'severity' => 'critical',
+                'title' => 'File Deleted',
+                'message' => "File deleted by {$log->user?->name}",
+                'user' => $log->user?->name,
+                'created_at' => $log->created_at->toIso8601String(),
+                'time_ago' => $log->created_at->diffForHumans(),
+            ]);
+        $alerts = $alerts->merge($deletions);
+
+        // Critical: Early SD removals (last 24h)
+        $earlyRemovals = CameraSession::where('removal_decision', 'early_confirmed')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('ended_at', '>=', now()->subHours(24))
+            ->with('editor')
+            ->get()
+            ->map(fn($s) => [
+                'type' => 'early_removal',
+                'severity' => $s->files_pending > 10 ? 'critical' : 'warning',
+                'title' => 'Early SD Removal',
+                'message' => "{$s->files_pending} files not copied - Camera {$s->camera_number}",
+                'user' => $s->editor->name,
+                'created_at' => $s->ended_at->toIso8601String(),
+                'time_ago' => $s->ended_at->diffForHumans(),
+            ]);
+        $alerts = $alerts->merge($earlyRemovals);
+
+        // Warning: Stalled sessions (no progress for 30+ min)
+        $stalledSessions = CameraSession::where('status', 'active')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->where('updated_at', '<', now()->subMinutes(30))
+            ->whereColumn('files_copied', '<', 'files_detected')
+            ->with('editor')
+            ->get()
+            ->map(fn($s) => [
+                'type' => 'stalled_session',
+                'severity' => 'warning',
+                'title' => 'Stalled Session',
+                'message' => "No progress for " . $s->updated_at->diffInMinutes(now()) . " min - {$s->files_pending} files pending",
+                'user' => $s->editor->name,
+                'created_at' => $s->updated_at->toIso8601String(),
+                'time_ago' => $s->updated_at->diffForHumans(),
+            ]);
+        $alerts = $alerts->merge($stalledSessions);
+
+        // Warning: Editors offline with active sessions
+        $offlineWithSessions = CameraSession::where('status', 'active')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $editorIds)
+            ->whereHas('editor', fn($q) => $q->where(function ($q2) {
+                $q2->where('is_online', false)
+                    ->orWhere('last_seen_at', '<', now()->subMinutes(10));
+            }))
+            ->with('editor')
+            ->get()
+            ->map(fn($s) => [
+                'type' => 'offline_editor',
+                'severity' => 'warning',
+                'title' => 'Editor Offline',
+                'message' => "{$s->editor->name} went offline with active session",
+                'user' => $s->editor->name,
+                'created_at' => $s->editor->last_seen_at?->toIso8601String() ?? now()->toIso8601String(),
+                'time_ago' => $s->editor->last_seen_at?->diffForHumans() ?? 'Unknown',
+            ]);
+        $alerts = $alerts->merge($offlineWithSessions);
+
+        // Info: Critical issues unacknowledged
+        $criticalIssues = Issue::where('severity', 'critical')
+            ->where('status', 'open')
+            ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
+            ->with('reporter')
+            ->get()
+            ->map(fn($i) => [
+                'type' => 'critical_issue',
+                'severity' => 'critical',
+                'title' => 'Critical Issue Open',
+                'message' => $i->description ?? "Issue #{$i->issue_id} needs attention",
+                'user' => $i->reporter?->name,
+                'created_at' => $i->created_at->toIso8601String(),
+                'time_ago' => $i->created_at->diffForHumans(),
+            ]);
+        $alerts = $alerts->merge($criticalIssues);
+
+        // Sort by severity and time
+        $severityOrder = ['critical' => 0, 'warning' => 1, 'info' => 2];
+        $sortedAlerts = $alerts->sortBy([
+            fn($a, $b) => ($severityOrder[$a['severity']] ?? 3) <=> ($severityOrder[$b['severity']] ?? 3),
+            fn($a, $b) => $b['created_at'] <=> $a['created_at'],
+        ])->values();
+
+        // Summary
+        $summary = [
+            'total' => $alerts->count(),
+            'critical' => $alerts->where('severity', 'critical')->count(),
+            'warning' => $alerts->where('severity', 'warning')->count(),
+            'info' => $alerts->where('severity', 'info')->count(),
+        ];
+
+        return response()->json([
+            'summary' => $summary,
+            'alerts' => $sortedAlerts->take(50),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Format minutes to human readable
+     */
+    private function formatMinutes($minutes): string
+    {
+        if ($minutes < 60) {
+            return "{$minutes} min";
+        }
+        $hours = floor($minutes / 60);
+        $mins = $minutes % 60;
+        return $mins > 0 ? "{$hours}h {$mins}m" : "{$hours}h";
+    }
+
+    /**
      * Format bytes to human readable format
      */
     private function formatBytes($bytes): string

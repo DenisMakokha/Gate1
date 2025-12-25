@@ -132,6 +132,12 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/backup', [DashboardController::class, 'backup']);
         Route::get('/editor', [DashboardController::class, 'editor']);
         Route::get('/workflow-progress', [DashboardController::class, 'workflowProgress']);
+        Route::get('/time-analytics', [DashboardController::class, 'timeAnalytics']);
+        Route::get('/incidents', [DashboardController::class, 'incidents']);
+        Route::get('/sd-card-lifecycle', [DashboardController::class, 'sdCardLifecycle']);
+        Route::get('/comparative', [DashboardController::class, 'comparativeAnalytics']);
+        Route::get('/predictive', [DashboardController::class, 'predictiveMetrics']);
+        Route::get('/alerts', [DashboardController::class, 'alerts']);
     });
 
     // User management routes (admin only)
