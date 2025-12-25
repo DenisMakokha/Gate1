@@ -23,6 +23,7 @@ import HealingCases from './pages/HealingCases';
 import BackupAnalytics from './pages/BackupAnalytics';
 import QualityControl from './pages/QualityControl';
 import StorageForecast from './pages/StorageForecast';
+import DataProtection from './pages/DataProtection';
 
 function PrivateRoute({ children, roles }) {
   const { user, loading, hasAnyRole } = useAuth();
@@ -155,6 +156,12 @@ function App() {
           <Route path="/storage-forecast" element={
             <PrivateRoute roles={['admin', 'backup']}>
               <StorageForecast />
+            </PrivateRoute>
+          } />
+          
+          <Route path="/data-protection" element={
+            <PrivateRoute roles={['admin']}>
+              <DataProtection />
             </PrivateRoute>
           } />
           

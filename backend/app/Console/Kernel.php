@@ -9,7 +9,11 @@ class Kernel extends ConsoleKernel
 {
     protected function schedule(Schedule $schedule): void
     {
-        //
+        // Process media deletions daily at 2 AM
+        $schedule->command('media:process-deletion')
+            ->dailyAt('02:00')
+            ->withoutOverlapping()
+            ->runInBackground();
     }
 
     protected function commands(): void

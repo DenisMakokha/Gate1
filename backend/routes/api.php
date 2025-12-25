@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\ActivityFeedController;
 use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\StorageForecastController;
 use App\Http\Controllers\Api\QualityControlController;
+use App\Http\Controllers\Api\MediaDeletionController;
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -259,5 +260,15 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/', [QualityControlController::class, 'index']);
         Route::get('/needs-training', [QualityControlController::class, 'needsTraining']);
         Route::get('/editor/{editorId}', [QualityControlController::class, 'editorReport']);
+    });
+
+    // Media Deletion / Data Protection routes
+    Route::prefix('media-deletion')->group(function () {
+        Route::get('/status', [MediaDeletionController::class, 'getDeletionStatus']);
+        Route::get('/event/{eventId}', [MediaDeletionController::class, 'getSettings']);
+        Route::put('/event/{eventId}', [MediaDeletionController::class, 'updateSettings']);
+        Route::post('/event/{eventId}/trigger', [MediaDeletionController::class, 'triggerDeletion']);
+        Route::get('/tasks', [MediaDeletionController::class, 'getPendingTasks']);
+        Route::post('/tasks/complete', [MediaDeletionController::class, 'reportTaskCompletion']);
     });
 });

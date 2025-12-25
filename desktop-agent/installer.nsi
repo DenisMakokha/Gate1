@@ -28,9 +28,17 @@ SetCompressor /SOLID lzma
 !define MUI_ABORTWARNING
 !define MUI_UNABORTWARNING
 
-; Header image (optional - uses default if not present)
-; !define MUI_HEADERIMAGE
-; !define MUI_HEADERIMAGE_BITMAP "assets\header.bmp"
+; Custom installer images (like Android Studio)
+!define MUI_WELCOMEFINISHPAGE_BITMAP "assets\wizard.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "assets\wizard.bmp"
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "assets\header.bmp"
+!define MUI_HEADERIMAGE_UNBITMAP "assets\header.bmp"
+!define MUI_HEADERIMAGE_RIGHT
+
+; Icon
+!define MUI_ICON "assets\icon.ico"
+!define MUI_UNICON "assets\icon.ico"
 
 ; Welcome page settings
 !define MUI_WELCOMEPAGE_TITLE "Welcome to ${PRODUCT_NAME} Setup"

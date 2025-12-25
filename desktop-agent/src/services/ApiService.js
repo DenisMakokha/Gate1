@@ -108,6 +108,20 @@ class ApiService {
     async setUserOffline() {
         return this.client.post('/users/offline');
     }
+
+    // Media Deletion / Data Protection
+    async getPendingDeletionTasks(deviceId) {
+        return this.client.get('/media-deletion/tasks', { params: { device_id: deviceId } });
+    }
+
+    async reportDeletionTaskCompletion(taskId, deviceId, status, errorMessage = null) {
+        return this.client.post('/media-deletion/tasks/complete', {
+            task_id: taskId,
+            device_id: deviceId,
+            status: status,
+            error_message: errorMessage,
+        });
+    }
 }
 
 module.exports = { ApiService };

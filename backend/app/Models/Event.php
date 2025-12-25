@@ -19,11 +19,19 @@ class Event extends Model
         'end_date',
         'status',
         'created_by',
+        'auto_delete_enabled',
+        'auto_delete_date',
+        'auto_delete_days_after_end',
+        'media_deleted_at',
+        'deletion_reason',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
+        'auto_delete_date' => 'date',
+        'auto_delete_enabled' => 'boolean',
+        'media_deleted_at' => 'datetime',
     ];
 
     public function creator()
@@ -54,5 +62,41 @@ class Event extends Model
     public function isActive(): bool
     {
         return $this->status === 'active';
+    }
+
+    public function deletionTasks()
+    {
+        return $this->hasMany(MediaDeletionTask::class);
+    }
+
+    public function shouldAutoDelete(): bool
+    {
+        if (!$this->auto_delete_enabled || $this->media_deleted_at) {
+            return false;
+        }
+
+        if ($this->auto_delete_date && $this->auto_delete_date->isPast()) {
+            return true;
+        }
+
+        if ($this->auto_delete_days_after_end && $this->end_date) {
+            $deleteDate = $this->end_date->addDays($this->auto_delete_days_after_end);
+            return $deleteDate->isPast();
+        }
+
+        return false;
+    }
+
+    public function getAutoDeleteDateAttribute($value)
+    {
+        if ($value) {
+            return \Carbon\Carbon::parse($value);
+        }
+        
+        if ($this->auto_delete_days_after_end && $this->end_date) {
+            return $this->end_date->addDays($this->auto_delete_days_after_end);
+        }
+        
+        return null;
     }
 }

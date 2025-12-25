@@ -24,6 +24,7 @@
         "backgroundColor": "#2563eb"
       },
       "package": "org.gate1system.mobile",
+      "minSdkVersion": 21,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
@@ -39,8 +40,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "gate1-mobile"
+        "projectId": "7e041383-6f01-4515-a2a1-b0447248545c"
       }
-    }
+    },
+    "owner": "denis.makokha"
   }
 }
