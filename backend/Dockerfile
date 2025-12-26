@@ -67,6 +67,9 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
+# Create supervisor log directory
+RUN mkdir -p /var/log/supervisor
+
 # Copy supervisor configuration
 COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
