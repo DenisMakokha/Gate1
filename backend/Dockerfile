@@ -1,7 +1,7 @@
 # Gate1 System - Laravel Backend Dockerfile
 # Production-ready PHP-FPM container
 
-FROM php:8.2-fpm-alpine
+FROM php:8.3-fpm-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
