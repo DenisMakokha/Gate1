@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = '/api';
+// Uses relative URL in production (same domain), absolute in development
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -51,6 +52,7 @@ export const dashboardService = {
   getComparative: (eventId) => api.get('/dashboard/comparative', { params: { event_id: eventId } }),
   getPredictive: (eventId) => api.get('/dashboard/predictive', { params: { event_id: eventId } }),
   getAlerts: (eventId) => api.get('/dashboard/alerts', { params: { event_id: eventId } }),
+  getLiveOperations: (eventId) => api.get('/dashboard/live-operations', { params: { event_id: eventId } }),
 };
 
 export const eventService = {
@@ -77,6 +79,10 @@ export const groupService = {
 export const mediaService = {
   search: (params) => api.get('/media/search', { params }),
   getStatus: (mediaId) => api.get(`/media/${mediaId}/status`),
+  getDownloadUrl: (mediaId) => api.get(`/media/${mediaId}/download-url`),
+  logPlayback: (mediaId, data) => api.post(`/media/${mediaId}/log-playback`, data),
+  logDownload: (mediaId, data) => api.post(`/media/${mediaId}/log-download`, data),
+  getPlaybackSource: (mediaId) => api.get(`/media/${mediaId}/playback-source`),
 };
 
 export const issueService = {
@@ -109,6 +115,12 @@ export const userService = {
   assignGroups: (id, groupIds) => api.post(`/users/${id}/groups`, { group_ids: groupIds }),
   getRoles: () => api.get('/users/roles'),
   getEditorsStatus: (params) => api.get('/users/editors-status', { params }),
+  // Bulk import and invitations
+  bulkImport: (data) => api.post('/users/bulk-import', data),
+  downloadTemplate: () => api.get('/users/import-template', { responseType: 'blob' }),
+  getInvitations: () => api.get('/users/invitations'),
+  createInvitation: (data) => api.post('/users/invitations', data),
+  revokeInvitation: (id) => api.delete(`/users/invitations/${id}`),
 };
 
 export const auditLogService = {
@@ -178,6 +190,7 @@ export const exportService = {
 };
 
 export const qualityControlService = {
+  getOverview: (eventId) => api.get('/quality-control/overview', { params: { event_id: eventId } }),
   getDashboard: (eventId) => api.get('/quality-control/dashboard', { params: { event_id: eventId } }),
   getQueue: (params) => api.get('/quality-control/queue', { params }),
   submit: (mediaId, data) => api.post(`/quality-control/${mediaId}/submit`, data),
@@ -202,6 +215,17 @@ export const mediaDeletionService = {
   request: (mediaId, reason) => api.post(`/media-deletion/${mediaId}/request`, { reason }),
   approve: (requestId) => api.post(`/media-deletion/${requestId}/approve`),
   reject: (requestId, reason) => api.post(`/media-deletion/${requestId}/reject`, { reason }),
+};
+
+export const workAllocationService = {
+  getOverview: () => api.get('/work-allocation/overview'),
+  assign: (editorId, mediaIds) => api.post('/work-allocation/assign', { editor_id: editorId, media_ids: mediaIds }),
+  autoDistribute: (params) => api.post('/work-allocation/auto-distribute', params),
+  reassign: (fromEditorId, toEditorId, mediaIds) => api.post('/work-allocation/reassign', {
+    from_editor_id: fromEditorId,
+    to_editor_id: toEditorId,
+    media_ids: mediaIds,
+  }),
 };
 
 export default api;

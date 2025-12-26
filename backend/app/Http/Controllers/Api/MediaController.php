@@ -235,6 +235,185 @@ class MediaController extends Controller
         return response()->json(['status' => 'uploaded']);
     }
 
+    /**
+     * Log playback action - audit trail per blueprint
+     */
+    public function logPlayback(Request $request, string $mediaId): JsonResponse
+    {
+        $user = auth('api')->user();
+        $media = Media::where('media_id', $mediaId)->first();
+
+        if (!$media) {
+            return response()->json(['error' => 'Media not found'], 404);
+        }
+
+        $request->validate([
+            'source' => 'nullable|string',
+            'reason' => 'nullable|string',
+        ]);
+
+        // Create audit log entry
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'media_playback',
+            'entity_type' => 'media',
+            'entity_id' => $media->id,
+            'details' => [
+                'media_id' => $media->media_id,
+                'filename' => $media->filename,
+                'source' => $request->input('source', 'unknown'),
+                'reason' => $request->input('reason', 'oversight'),
+                'user_role' => $user->roles->first()?->name ?? 'unknown',
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json(['status' => 'logged', 'timestamp' => now()->toIso8601String()]);
+    }
+
+    /**
+     * Log download action - audit trail per blueprint
+     */
+    public function logDownload(Request $request, string $mediaId): JsonResponse
+    {
+        $user = auth('api')->user();
+        $media = Media::where('media_id', $mediaId)->first();
+
+        if (!$media) {
+            return response()->json(['error' => 'Media not found'], 404);
+        }
+
+        // Only Admin and Team Lead can download
+        if (!$user->hasOperationalAccess()) {
+            return response()->json(['error' => 'Download not permitted'], 403);
+        }
+
+        // Create audit log entry
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'media_download',
+            'entity_type' => 'media',
+            'entity_id' => $media->id,
+            'details' => [
+                'media_id' => $media->media_id,
+                'filename' => $media->filename,
+                'source' => $request->input('source', 'unknown'),
+                'user_role' => $user->roles->first()?->name ?? 'unknown',
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json(['status' => 'logged', 'timestamp' => now()->toIso8601String()]);
+    }
+
+    /**
+     * Get download URL for media - Admin/Team Lead only
+     */
+    public function getDownloadUrl(string $mediaId): JsonResponse
+    {
+        $user = auth('api')->user();
+        $media = Media::where('media_id', $mediaId)->first();
+
+        if (!$media) {
+            return response()->json(['error' => 'Media not found'], 404);
+        }
+
+        // Only Admin and Team Lead can download
+        if (!$user->hasOperationalAccess()) {
+            return response()->json(['error' => 'Download not permitted'], 403);
+        }
+
+        // Determine best source for download
+        $url = null;
+        $source = 'unavailable';
+
+        // Priority 1: Verified backup
+        $verifiedBackup = $media->backups()->where('is_verified', true)->first();
+        if ($verifiedBackup) {
+            $url = $verifiedBackup->download_url ?? $media->file_path;
+            $source = 'verified_backup';
+        }
+        // Priority 2: Editor stream (if online)
+        elseif ($media->editor && $media->editor->is_online) {
+            $url = $media->file_path; // Would be streamed from editor
+            $source = 'editor_stream';
+        }
+
+        if (!$url) {
+            return response()->json([
+                'error' => 'Source offline',
+                'message' => 'No download source currently available'
+            ], 404);
+        }
+
+        return response()->json([
+            'url' => $url,
+            'source' => $source,
+            'filename' => $media->filename,
+        ]);
+    }
+
+    /**
+     * Get playback source info - determines best source per blueprint priority
+     */
+    public function getPlaybackSource(string $mediaId): JsonResponse
+    {
+        $user = auth('api')->user();
+        $media = Media::with(['backups', 'editor', 'issues'])->where('media_id', $mediaId)->first();
+
+        if (!$media) {
+            return response()->json(['error' => 'Media not found'], 404);
+        }
+
+        $source = [
+            'type' => 'offline',
+            'label' => 'Source Offline',
+            'url' => null,
+            'available' => false,
+        ];
+
+        // Priority 1: Verified backup
+        $verifiedBackup = $media->backups()->where('is_verified', true)->first();
+        if ($verifiedBackup) {
+            $source = [
+                'type' => 'verified_backup',
+                'label' => 'Verified Backup',
+                'url' => $verifiedBackup->stream_url ?? $media->preview_url,
+                'available' => true,
+            ];
+        }
+        // Priority 2: Editor stream
+        elseif ($media->editor && $media->editor->is_online && $media->editor->last_seen_at?->gte(now()->subMinutes(5))) {
+            $source = [
+                'type' => 'editor_stream',
+                'label' => 'Editor Stream (Live)',
+                'url' => $media->preview_url,
+                'available' => true,
+            ];
+        }
+        // Priority 3: QA cache
+        elseif ($media->qa_cache_available) {
+            $source = [
+                'type' => 'qa_cache',
+                'label' => 'QA Review Cache',
+                'url' => $media->qa_cache_url,
+                'available' => true,
+            ];
+        }
+
+        return response()->json([
+            'source' => $source,
+            'media' => [
+                'media_id' => $media->media_id,
+                'filename' => $media->filename,
+                'has_issues' => $media->issues->count() > 0,
+                'backup_verified' => $verifiedBackup !== null,
+            ],
+        ]);
+    }
+
     private function validateFilename(string $filename, array $metadata): array
     {
         $issues = [];

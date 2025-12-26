@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { groupService, eventService } from '../services/api';
-import { Plus, Users, AlertTriangle, CheckCircle, ChevronRight } from 'lucide-react';
+import { groupService, eventService, userService } from '../services/api';
+import { Plus, Users, AlertTriangle, CheckCircle, ChevronRight, X, UserPlus } from 'lucide-react';
 
 export default function Groups() {
   const [groups, setGroups] = useState([]);
@@ -9,6 +9,9 @@ export default function Groups() {
   const [showModal, setShowModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [members, setMembers] = useState([]);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -59,6 +62,30 @@ export default function Groups() {
   const handleSelectGroup = async (group) => {
     setSelectedGroup(group);
     await loadMembers(group.id);
+  };
+
+  const openAddMemberModal = async () => {
+    try {
+      const response = await userService.getAll({ per_page: 100 });
+      const users = response.data || response || [];
+      const memberIds = members.map(m => m.id);
+      setAvailableUsers(users.filter(u => !memberIds.includes(u.id)));
+      setShowAddMemberModal(true);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!selectedUserId || !selectedGroup) return;
+    try {
+      await groupService.addMember(selectedGroup.id, selectedUserId);
+      await loadMembers(selectedGroup.id);
+      setShowAddMemberModal(false);
+      setSelectedUserId('');
+    } catch (error) {
+      console.error('Failed to add member:', error);
+    }
   };
 
   if (loading) {
@@ -161,7 +188,11 @@ export default function Groups() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                   <h3 className="font-semibold text-gray-900">Team Members</h3>
-                  <button className="text-sm text-blue-600 hover:text-blue-700">
+                  <button
+                    onClick={openAddMemberModal}
+                    className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    <UserPlus className="w-4 h-4" />
                     Add Member
                   </button>
                 </div>
@@ -273,6 +304,54 @@ export default function Groups() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Member Modal */}
+      {showAddMemberModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 m-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Add Team Member</h2>
+              <button onClick={() => setShowAddMemberModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choose a user...</option>
+                  {availableUsers.map((user) => (
+                    <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                  ))}
+                </select>
+              </div>
+              {availableUsers.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-2">No available users to add</p>
+              )}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMemberModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddMember}
+                  disabled={!selectedUserId}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Add Member
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

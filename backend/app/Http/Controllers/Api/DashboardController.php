@@ -21,15 +21,30 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         $eventId = $request->get('event_id');
 
+        // Calculate camera health metrics
+        $totalCameras = \App\Models\Camera::count();
+        $camerasWithIssues = Issue::whereIn('status', ['open', 'acknowledged'])
+            ->distinct('camera_id')->count('camera_id');
+        $camerasHealthy = max(0, $totalCameras - $camerasWithIssues);
+        
+        // Count early removals today
+        $earlyRemovalsToday = CameraSession::where('status', 'early_removal')
+            ->whereDate('ended_at', today())->count();
+        
+        // Calculate backup coverage
+        $totalMedia = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))->count();
+        $backedUp = Media::whereHas('backups', fn($q) => $q->where('is_verified', true))->count();
+        $backupCoverage = $totalMedia > 0 ? round(($backedUp / $totalMedia) * 100) : 0;
+        
         return response()->json([
             'overview' => [
-                'total_media' => Media::when($eventId, fn($q) => $q->where('event_id', $eventId))->count(),
+                'total_media' => $totalMedia,
                 'media_today' => Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
                     ->whereDate('created_at', today())->count(),
                 'open_issues' => Issue::whereIn('status', ['open', 'acknowledged', 'in_progress'])->count(),
@@ -39,6 +54,11 @@ class DashboardController extends Controller
                 'active_sessions' => CameraSession::where('status', 'active')->count(),
                 'online_agents' => Agent::where('status', 'active')
                     ->where('last_seen_at', '>', now()->subMinutes(2))->count(),
+                'total_editors' => User::whereHas('roles', fn($q) => $q->where('name', 'editor'))->count(),
+                'cameras_healthy' => $camerasHealthy,
+                'cameras_attention' => $camerasWithIssues,
+                'early_removals_today' => $earlyRemovalsToday,
+                'backup_coverage' => $backupCoverage,
             ],
             'events' => Event::where('status', 'active')
                 ->withCount('media')
@@ -235,7 +255,7 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -295,7 +315,7 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -349,7 +369,7 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -415,7 +435,7 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -478,14 +498,14 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         $eventId = $request->get('event_id');
 
         // Determine which groups/editors to include
-        if ($user->isAdmin()) {
+        if ($user->hasOperationalAccess()) {
             $groupIds = Group::pluck('id')->toArray();
             $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
         } else {
@@ -686,14 +706,14 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         $eventId = $request->get('event_id');
 
         // Determine scope based on user role
-        if ($user->isAdmin()) {
+        if ($user->hasOperationalAccess()) {
             $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id')->toArray();
         } else {
             $groupIds = $user->ledGroups()->pluck('id')->toArray();
@@ -1403,6 +1423,94 @@ class DashboardController extends Controller
         return response()->json([
             'summary' => $summary,
             'alerts' => $sortedAlerts->take(50),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Live Operations - Real-time SD sessions and camera activity
+     * Per blueprint: The real-time nerve center
+     */
+    public function liveOperations(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Scope based on role
+        $groupIds = null;
+        if ($user->isGroupLeader() && !$user->hasOperationalAccess()) {
+            $groupIds = $user->ledGroups()->pluck('id')->toArray();
+        }
+
+        // Active SD sessions
+        $activeSessions = CameraSession::with(['editor', 'camera', 'event', 'sdCard'])
+            ->where('status', 'active')
+            ->when($groupIds, function ($q) use ($groupIds) {
+                $q->whereHas('editor', fn($eq) => $eq->whereHas('groups', fn($gq) => $gq->whereIn('groups.id', $groupIds)));
+            })
+            ->orderByDesc('started_at')
+            ->get()
+            ->map(fn($s) => [
+                'id' => $s->id,
+                'camera_number' => $s->camera?->camera_number ?? $s->camera_number,
+                'sd_label' => $s->sdCard?->sd_label ?? $s->sd_label,
+                'event_name' => $s->event?->name ?? 'Unknown',
+                'editor_name' => $s->editor?->name ?? 'Unknown',
+                'group_code' => $s->editor?->groups->first()?->group_code ?? '',
+                'files_total' => $s->files_detected ?? 0,
+                'files_copied' => $s->files_copied ?? 0,
+                'files_pending' => max(0, ($s->files_detected ?? 0) - ($s->files_copied ?? 0)),
+                'status' => $s->status,
+                'started_at' => $s->started_at?->toIso8601String(),
+            ]);
+
+        // Early removals today
+        $earlyRemovals = CameraSession::with(['editor', 'camera'])
+            ->where('status', 'early_removal')
+            ->whereDate('ended_at', today())
+            ->when($groupIds, function ($q) use ($groupIds) {
+                $q->whereHas('editor', fn($eq) => $eq->whereHas('groups', fn($gq) => $gq->whereIn('groups.id', $groupIds)));
+            })
+            ->orderByDesc('ended_at')
+            ->get()
+            ->map(fn($s) => [
+                'id' => $s->id,
+                'camera_number' => $s->camera?->camera_number ?? $s->camera_number,
+                'sd_label' => $s->sdCard?->sd_label ?? $s->sd_label,
+                'files_pending' => max(0, ($s->files_detected ?? 0) - ($s->files_copied ?? 0)),
+                'editor_name' => $s->editor?->name ?? 'Unknown',
+                'removed_at' => $s->ended_at?->toIso8601String(),
+            ]);
+
+        // Camera health overview
+        $cameras = \App\Models\Camera::withCount([
+            'issues as open_issues' => fn($q) => $q->whereIn('status', ['open', 'acknowledged']),
+        ])->get()->map(fn($c) => [
+            'camera_number' => $c->camera_number,
+            'health_score' => $c->open_issues > 5 ? 30 : ($c->open_issues > 2 ? 60 : ($c->open_issues > 0 ? 80 : 95)),
+            'open_issues' => $c->open_issues,
+        ])->sortBy('health_score')->values();
+
+        // Stats
+        $totalCameras = $cameras->count();
+        $camerasHealthy = $cameras->where('health_score', '>=', 80)->count();
+        $camerasAttention = $cameras->where('health_score', '<', 60)->count();
+
+        return response()->json([
+            'activeSessions' => $activeSessions,
+            'earlyRemovals' => $earlyRemovals,
+            'cameraHealth' => $cameras->take(20),
+            'stats' => [
+                'totalActiveSessions' => $activeSessions->count(),
+                'editorsOnline' => Agent::where('status', 'active')
+                    ->where('last_seen_at', '>', now()->subMinutes(2))->count(),
+                'camerasHealthy' => $camerasHealthy,
+                'camerasAttention' => $camerasAttention,
+                'earlyRemovalsToday' => $earlyRemovals->count(),
+            ],
             'generated_at' => now()->toIso8601String(),
         ]);
     }

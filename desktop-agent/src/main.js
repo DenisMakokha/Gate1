@@ -1,19 +1,33 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, shell, dialog } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+const crypto = require('crypto');
+const os = require('os');
 const { SDCardService } = require('./services/SDCardService');
 const { FileWatcherService } = require('./services/FileWatcherService');
 const { ApiService } = require('./services/ApiService');
 const { SessionService } = require('./services/SessionService');
 const { LoggerService } = require('./services/LoggerService');
 const { AutoUpdateService } = require('./services/AutoUpdateService');
+const { MediaDeletionService } = require('./services/MediaDeletionService');
+const { BackupService } = require('./services/BackupService');
+const { AudioAnalyzer } = require('./services/AudioAnalyzer');
 
 // Handle Squirrel installer events (Windows)
 if (require('electron-squirrel-startup')) {
     app.quit();
 }
 
-const store = new Store();
+// Generate encryption key from machine-specific data for secure storage
+function getEncryptionKey() {
+    const machineId = `${os.hostname()}-${os.platform()}-${os.arch()}-gate1`;
+    return crypto.createHash('sha256').update(machineId).digest('hex').substring(0, 32);
+}
+
+const store = new Store({
+    encryptionKey: getEncryptionKey(),
+    clearInvalidConfig: true,
+});
 let mainWindow = null;
 let tray = null;
 let sdCardService = null;
@@ -22,6 +36,9 @@ let apiService = null;
 let sessionService = null;
 let logger = null;
 let autoUpdater = null;
+let mediaDeletionService = null;
+let backupService = null;
+let audioAnalyzer = null;
 
 const isDev = process.argv.includes('--dev');
 
@@ -33,13 +50,24 @@ try {
     console.error('Failed to initialize logger:', e);
 }
 
+// Global error handlers for crash recovery
+process.on('uncaughtException', (error) => {
+    logger?.error('Uncaught Exception', { message: error.message, stack: error.stack });
+    console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger?.error('Unhandled Rejection', { reason: String(reason) });
+    console.error('Unhandled Rejection:', reason);
+});
+
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 450,
         height: 650,
         resizable: false,
         frame: false,
-        show: false,
+        show: true,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -158,10 +186,28 @@ function updateTrayMenu(status = 'offline') {
 async function initializeServices() {
     const config = store.get('config', {});
     
-    apiService = new ApiService(config.apiUrl || 'http://localhost:8000/api');
+    apiService = new ApiService(config.apiUrl || 'http://127.0.0.1:8000/api');
+    
+    // Set up token expiry handler
+    apiService.setTokenExpiredCallback(() => {
+        logger?.warn('Token expired - prompting re-login');
+        store.delete('token');
+        mainWindow?.webContents?.send('token-expired');
+        mainWindow?.show();
+    });
+    
+    // Restore token if exists
+    const savedToken = store.get('token');
+    if (savedToken) {
+        apiService.setToken(savedToken);
+    }
+    
     sdCardService = new SDCardService();
     fileWatcherService = new FileWatcherService(config.watchedFolders || []);
     sessionService = new SessionService(apiService, store);
+    mediaDeletionService = new MediaDeletionService(apiService, logger);
+    backupService = new BackupService(store, logger);
+    audioAnalyzer = new AudioAnalyzer(logger);
 
     // Set up event handlers
     sdCardService.on('sd-inserted', handleSDInserted);
@@ -169,17 +215,44 @@ async function initializeServices() {
     fileWatcherService.on('file-renamed', handleFileRenamed);
     fileWatcherService.on('file-copied', handleFileCopied);
     fileWatcherService.on('file-deleted', handleFileDeleted);
+    fileWatcherService.on('wrong-destination', handleWrongDestination);
+    
+    // Backup service events
+    backupService.on('backup-disk-inserted', handleBackupDiskInserted);
+    backupService.on('backup-disk-removed', handleBackupDiskRemoved);
+    backupService.on('backup-verify-start', (data) => mainWindow?.webContents?.send('backup-verify-start', data));
+    backupService.on('backup-verify-progress', (data) => mainWindow?.webContents?.send('backup-verify-progress', data));
+    backupService.on('backup-verify-complete', (data) => mainWindow?.webContents?.send('backup-verify-complete', data));
+    
+    // Session service events for banner
+    sessionService.on('session-started', (session) => mainWindow?.webContents?.send('session-started', session));
+    sessionService.on('session-progress', (session) => mainWindow?.webContents?.send('session-progress', session));
+    sessionService.on('session-ended', (session) => mainWindow?.webContents?.send('session-ended', session));
 
-    // Start services if registered
-    if (store.get('isRegistered')) {
-        await startServices();
-    }
+    // Don't auto-start heavy services - wait for user to be on dashboard
+    // Services will start after successful registration or on dashboard load
 }
 
 async function startServices() {
     try {
         await sdCardService.start();
         await fileWatcherService.start();
+        
+        // Start media deletion service if device is registered
+        const deviceId = store.get('deviceId');
+        if (deviceId && mediaDeletionService) {
+            mediaDeletionService.setDeviceId(deviceId);
+            // Pass watched folders for file search during deletion
+            const config = store.get('config', {});
+            mediaDeletionService.setWatchedFolders(config.watchedFolders || []);
+            await mediaDeletionService.start();
+        }
+        
+        // Start backup service for backup disk detection
+        if (backupService) {
+            await backupService.start();
+        }
+        
         startHeartbeat();
         updateTrayMenu('online');
     } catch (error) {
@@ -188,12 +261,37 @@ async function startServices() {
     }
 }
 
+let heartbeatInterval = null;
+let wasOffline = false;
+
 function startHeartbeat() {
     // Send initial heartbeat immediately
     sendHeartbeat();
     
     // Then send every 60 seconds (for user online status tracking)
-    setInterval(sendHeartbeat, 60000);
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(sendHeartbeat, 60000);
+}
+
+async function handleReconnection() {
+    logger?.info('Connection restored - processing offline queue');
+    
+    // Process any queued operations
+    if (apiService?.pendingSync?.length > 0) {
+        try {
+            const result = await apiService.processSyncQueue();
+            logger?.info('Offline queue processed', result);
+            
+            if (result.processed > 0) {
+                mainWindow?.webContents?.send('sync-complete', result);
+            }
+        } catch (error) {
+            logger?.error('Failed to process sync queue', error.message);
+        }
+    }
+    
+    // Notify UI of reconnection
+    mainWindow?.webContents?.send('connection-online');
 }
 
 async function sendHeartbeat() {
@@ -203,15 +301,26 @@ async function sendHeartbeat() {
         const token = store.get('token');
         
         if (agentId && deviceId) {
-            // Agent heartbeat
+            // Agent heartbeat with real latency
+            const pingResult = await apiService.ping();
+            
+            // Detect reconnection
+            if (pingResult.online && wasOffline) {
+                wasOffline = false;
+                await handleReconnection();
+            } else if (!pingResult.online) {
+                wasOffline = true;
+                mainWindow?.webContents?.send('connection-offline');
+            }
+            
             await apiService.heartbeat({
                 agent_id: agentId,
                 device_id: deviceId,
-                status: 'online',
-                latency_ms: Date.now() % 100,
+                status: pingResult.online ? 'online' : 'degraded',
+                latency_ms: pingResult.latency || 0,
                 watched_folders: store.get('config.watchedFolders', []),
             });
-            updateTrayMenu('online');
+            updateTrayMenu(pingResult.online ? 'online' : 'offline');
         }
         
         // User online status heartbeat (separate from agent heartbeat)
@@ -221,14 +330,16 @@ async function sendHeartbeat() {
         }
     } catch (error) {
         console.error('Heartbeat failed:', error);
+        wasOffline = true;
         updateTrayMenu('offline');
+        mainWindow?.webContents?.send('connection-offline');
     }
 }
 
 function getCurrentActivity() {
-    const session = sessionService?.getActiveSessions?.() || [];
-    if (session.length > 0) {
-        return `Processing ${session.length} SD card(s)`;
+    const sessions = sessionService?.getAllActiveSessions?.() || [];
+    if (sessions.length > 0) {
+        return `Processing ${sessions.length} SD card(s)`;
     }
     return 'Idle - Monitoring folders';
 }
@@ -236,6 +347,7 @@ function getCurrentActivity() {
 async function handleSDInserted(sdInfo) {
     console.log('SD Card inserted:', sdInfo);
     
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('sd-inserted', sdInfo);
     
     // Check if SD is registered
@@ -245,6 +357,30 @@ async function handleSDInserted(sdInfo) {
         if (response.status === 'found') {
             // Known SD card
             mainWindow.webContents.send('sd-recognized', response.sd_card);
+            
+            // Fetch and store event metadata for offline auto-deletion
+            // This ensures deletion works even if editor never comes online again
+            if (response.sd_card.event_id) {
+                try {
+                    const eventData = await apiService.getEvent(response.sd_card.event_id);
+                    if (eventData) {
+                        // Store event metadata locally for offline deletion
+                        store.set(`events.${eventData.id}`, {
+                            id: eventData.id,
+                            name: eventData.name,
+                            start_date: eventData.start_date,
+                            end_date: eventData.end_date,
+                            end_datetime: eventData.end_datetime,
+                            auto_delete_days_after_end: eventData.auto_delete_days_after_end || 0,
+                            auto_delete_enabled: eventData.auto_delete_enabled,
+                        });
+                        logger?.info('Event metadata stored for offline deletion', { eventId: eventData.id });
+                    }
+                } catch (e) {
+                    logger?.warn('Could not fetch event details', e.message);
+                }
+            }
+            
             await sessionService.startSession(sdInfo, response.sd_card);
         } else {
             // New SD card - prompt for binding
@@ -261,7 +397,8 @@ async function handleSDInserted(sdInfo) {
 async function handleSDRemoved(sdInfo) {
     console.log('SD Card removed:', sdInfo);
     
-    const session = sessionService.getActiveSession(sdInfo.hardwareId);
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const session = sessionService?.getActiveSession(sdInfo.hardwareId);
     
     if (session) {
         const pendingFiles = session.filesDetected - session.filesCopied;
@@ -284,6 +421,7 @@ async function handleSDRemoved(sdInfo) {
 async function handleFileRenamed(fileInfo) {
     console.log('File renamed:', fileInfo);
     
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     const parseResult = parseFilename(fileInfo.newName);
     
     mainWindow.webContents.send('file-renamed', {
@@ -314,21 +452,38 @@ async function handleFileRenamed(fileInfo) {
 async function handleFileCopied(fileInfo) {
     console.log('File copied:', fileInfo);
     
-    const session = sessionService.getActiveSessionByPath(fileInfo.sourcePath);
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const session = sessionService?.getActiveSessionByPath(fileInfo.sourcePath);
     if (session) {
         await sessionService.updateProgress(session.sessionId, {
             filesCopied: session.filesCopied + 1,
             filesPending: session.filesPending - 1,
         });
+        
+        // Track file for auto-deletion after event ends (data protection)
+        // Stores event end date locally for offline deletion
+        if (mediaDeletionService && session.eventId) {
+            const eventInfo = store.get(`events.${session.eventId}`, {});
+            mediaDeletionService.trackFileForDeletion(fileInfo, {
+                eventId: session.eventId,
+                eventName: eventInfo.name || session.eventName,
+                eventStartDate: eventInfo.start_date,
+                eventEndDate: eventInfo.end_date,
+                eventEndDatetime: eventInfo.end_datetime,
+                autoDeleteDays: eventInfo.auto_delete_days_after_end || 0,
+            }).catch(() => {}); // Non-blocking
+        }
     }
     
     mainWindow.webContents.send('file-copied', fileInfo);
+    
+    // Run lightweight audio analysis in background (non-blocking)
+    analyzeFileAudio(fileInfo).catch(() => {});
 }
 
 function parseFilename(filename) {
     // Expected format: FULLNAME_AGE_CONDITION_REGION.mp4
     const name = filename.replace(/\.[^/.]+$/, ''); // Remove extension
-    const parts = name.split('_');
     
     const issues = [];
     let status = 'valid';
@@ -340,8 +495,38 @@ function parseFilename(filename) {
         region: null,
     };
     
+    // Check for common separator issues FIRST
+    if (filename.includes(' ')) {
+        issues.push({ field: 'separator', message: 'Use underscores (_) instead of spaces', severity: 'warning' });
+        status = 'warning';
+    }
+    
+    if (filename.includes('-') && !filename.includes('_')) {
+        issues.push({ field: 'separator', message: 'Use underscores (_) instead of dashes (-)', severity: 'warning' });
+        status = 'warning';
+    }
+    
+    // Check for mixed separators
+    if (filename.includes('-') && filename.includes('_')) {
+        issues.push({ field: 'separator', message: 'Inconsistent separators - use only underscores (_)', severity: 'minor' });
+        if (status === 'valid') status = 'warning';
+    }
+    
+    // Check for special characters that shouldn't be in filenames
+    if (/[<>:"/\\|?*]/.test(filename)) {
+        issues.push({ field: 'characters', message: 'Contains invalid characters', severity: 'error' });
+        status = 'error';
+    }
+    
+    // Try to parse using multiple possible separators
+    let parts = name.split('_');
+    if (parts.length < 3) {
+        // Try splitting by dash or space as fallback
+        parts = name.split(/[-\s_]+/);
+    }
+    
     if (parts.length < 4) {
-        issues.push({ field: 'format', message: 'Filename does not match expected format' });
+        issues.push({ field: 'format', message: 'Missing components. Expected: NAME_AGE_CONDITION_REGION', severity: 'error' });
         status = 'error';
     } else {
         // Try to parse
@@ -358,32 +543,45 @@ function parseFilename(filename) {
         }
         
         if (ageIndex === -1) {
-            issues.push({ field: 'age', message: 'Age not found in filename' });
-            status = 'warning';
+            issues.push({ field: 'age', message: 'Age not found - should be a number', severity: 'warning' });
+            if (status === 'valid') status = 'warning';
         } else {
             metadata.full_name = parts.slice(0, ageIndex).join(' ');
             metadata.age = parseInt(parts[ageIndex]);
             
+            // Validate age is reasonable
+            if (metadata.age < 1 || metadata.age > 120) {
+                issues.push({ field: 'age', message: `Age ${metadata.age} seems incorrect`, severity: 'warning' });
+                if (status === 'valid') status = 'warning';
+            }
+            
             if (parts.length > ageIndex + 1) {
                 metadata.condition = parts[ageIndex + 1];
+                
+                // Check if condition looks valid (should be text, not numbers)
+                if (/^\d+$/.test(metadata.condition)) {
+                    issues.push({ field: 'condition', message: 'Condition should be text, not a number', severity: 'warning' });
+                    if (status === 'valid') status = 'warning';
+                }
             } else {
-                issues.push({ field: 'condition', message: 'Condition is missing' });
+                issues.push({ field: 'condition', message: 'Condition is missing', severity: 'error' });
                 status = 'error';
             }
             
             if (parts.length > ageIndex + 2) {
                 metadata.region = parts.slice(ageIndex + 2).join(' ');
             } else {
-                issues.push({ field: 'region', message: 'Region is missing' });
-                status = status === 'error' ? 'error' : 'warning';
+                issues.push({ field: 'region', message: 'Region is missing', severity: 'warning' });
+                if (status === 'valid') status = 'warning';
             }
         }
     }
     
-    // Check for spaces (should use underscores)
-    if (filename.includes(' ')) {
-        issues.push({ field: 'format', message: 'Use underscores instead of spaces' });
-        status = status === 'error' ? 'error' : 'warning';
+    // Check for all caps (preferred) vs mixed case
+    const hasLowercase = /[a-z]/.test(name);
+    if (hasLowercase && status === 'valid') {
+        // Just a minor tip, not an issue
+        issues.push({ field: 'case', message: 'Consider using UPPERCASE for consistency', severity: 'minor' });
     }
     
     return { status, issues, metadata };
@@ -391,6 +589,8 @@ function parseFilename(filename) {
 
 async function handleFileDeleted(fileInfo) {
     console.log('⚠️ File DELETED (not allowed!):', fileInfo);
+    
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     
     // Send to UI for warning
     mainWindow.webContents.send('file-deleted', fileInfo);
@@ -409,6 +609,68 @@ async function handleFileDeleted(fileInfo) {
         });
     } catch (error) {
         console.error('Failed to report file deletion:', error);
+    }
+}
+
+// Wrong destination detection handler
+function handleWrongDestination(data) {
+    console.log('⚠️ Wrong destination detected:', data.destPath);
+    
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    
+    // Get configured watched folders as suggestions
+    const config = store.get('config', {});
+    const suggestedPaths = (config.watchedFolders || []).map(f => 
+        typeof f === 'object' ? f.path : f
+    );
+    
+    mainWindow.webContents.send('wrong-destination', {
+        destPath: data.destPath,
+        filename: data.filename,
+        suggestedPaths: suggestedPaths,
+    });
+    
+    logger?.warn('Wrong destination detected', { destPath: data.destPath, filename: data.filename });
+}
+
+// Backup disk event handlers
+function handleBackupDiskInserted(diskInfo) {
+    console.log('💾 Backup disk inserted:', diskInfo);
+    
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    
+    mainWindow.webContents.send('backup-disk-inserted', diskInfo);
+    logger?.info('Backup disk inserted', diskInfo);
+}
+
+function handleBackupDiskRemoved(diskInfo) {
+    console.log('💾 Backup disk removed:', diskInfo);
+    
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    
+    mainWindow.webContents.send('backup-disk-removed', diskInfo);
+    logger?.info('Backup disk removed', diskInfo);
+}
+
+// Audio analysis after file copy
+async function analyzeFileAudio(fileInfo) {
+    if (!audioAnalyzer || !fileInfo.path) return;
+    
+    try {
+        const result = await audioAnalyzer.analyze(fileInfo.path);
+        
+        if (result.hasIssue) {
+            mainWindow?.webContents?.send('audio-issue-detected', {
+                issue: result.issue,
+                filename: fileInfo.name,
+                filepath: fileInfo.path,
+                details: result.details,
+            });
+            logger?.warn('Audio issue detected', { file: fileInfo.name, issue: result.issue });
+        }
+    } catch (error) {
+        // Silent fail - audio analysis is assistive, not critical
+        console.error('Audio analysis failed:', error.message);
     }
 }
 
@@ -438,14 +700,43 @@ ipcMain.handle('set-store', (event, key, value) => {
 
 ipcMain.handle('register-agent', async (event, data) => {
     try {
+        logger.info('Registering agent', data);
         const response = await apiService.registerAgent(data);
+        logger.info('Agent registered successfully', response);
         store.set('isRegistered', true);
         store.set('agentId', response.agent_id);
         store.set('deviceId', data.device_id);
-        await startServices();
+        
+        // Start services in background, don't block registration
+        startServices().catch(err => {
+            logger.error('Failed to start services after registration', err);
+        });
+        
         return response;
     } catch (error) {
-        throw error;
+        logger.error('Agent registration failed', { 
+            message: error.message, 
+            response: error.response?.data,
+            status: error.response?.status 
+        });
+        const errorMessage = error.response?.data?.message || error.message || 'Registration failed';
+        throw new Error(errorMessage);
+    }
+});
+
+ipcMain.handle('get-groups', async (event) => {
+    try {
+        // Ensure apiService is initialized
+        if (!apiService) {
+            const config = store.get('config', {});
+            apiService = new ApiService(config.apiUrl || 'http://127.0.0.1:8000/api');
+        }
+        const response = await apiService.getGroups();
+        logger.info('Groups fetched', response);
+        return response.groups || [];
+    } catch (error) {
+        logger.error('Failed to fetch groups', { message: error.message, response: error.response?.data });
+        return [];
     }
 });
 
@@ -482,13 +773,22 @@ ipcMain.handle('get-active-sessions', () => {
 
 ipcMain.handle('login', async (event, credentials) => {
     try {
+        // Ensure apiService is initialized
+        if (!apiService) {
+            const config = store.get('config', {});
+            apiService = new ApiService(config.apiUrl || 'http://127.0.0.1:8000/api');
+        }
+        
         const response = await apiService.login(credentials);
         store.set('token', response.authorization.token);
         store.set('user', response.user);
         apiService.setToken(response.authorization.token);
+        logger?.info('Login successful', { user: response.user?.email });
         return response;
     } catch (error) {
-        throw error;
+        logger?.error('Login failed', { message: error.message, response: error.response?.data });
+        const errorMessage = error.response?.data?.message || error.message || 'Login failed';
+        throw new Error(errorMessage);
     }
 });
 
@@ -511,6 +811,29 @@ ipcMain.handle('window-close', () => {
 
 ipcMain.handle('sync-now', async () => {
     syncNow();
+    return { success: true };
+});
+
+// Decision logging handlers
+ipcMain.handle('log-wrong-dest-decision', async (event, data) => {
+    logger?.warn('Wrong destination decision', data);
+    try {
+        await apiService?.reportIssue({
+            type: 'wrong_destination',
+            severity: 'low',
+            description: `User continued with non-standard destination`,
+            decision: data.decision,
+            device_id: store.get('deviceId'),
+            agent_id: store.get('agentId'),
+        });
+    } catch (e) {
+        // Silent fail
+    }
+    return { success: true };
+});
+
+ipcMain.handle('log-audio-issue-decision', async (event, data) => {
+    logger?.info('Audio issue decision', data);
     return { success: true };
 });
 
@@ -551,6 +874,17 @@ app.on('activate', () => {
 app.on('before-quit', async () => {
     app.isQuitting = true;
     
+    // Stop all services to prevent memory leaks
+    try {
+        sdCardService?.stop();
+        fileWatcherService?.stop();
+        mediaDeletionService?.stop();
+        backupService?.stop();
+        logger?.info('All services stopped');
+    } catch (e) {
+        console.error('Error stopping services:', e);
+    }
+    
     // Set user offline when app closes
     try {
         if (apiService && store.get('token')) {
@@ -573,23 +907,32 @@ ipcMain.handle('select-folder', async () => {
 });
 
 ipcMain.handle('save-settings', async (event, config) => {
-    store.set('config', config);
-    logger?.info('Settings saved', config);
-    
-    // Update file watcher with new folders
-    if (fileWatcherService && config.watchedFolders) {
-        fileWatcherService.updateFolders(config.watchedFolders);
+    try {
+        store.set('config', config);
+        logger?.info('Settings saved', config);
+        
+        // Update file watcher with new folders
+        if (fileWatcherService && config.watchedFolders) {
+            fileWatcherService.updateFolders(config.watchedFolders);
+        }
+        
+        // Handle auto-start setting
+        if (process.platform === 'win32') {
+            try {
+                app.setLoginItemSettings({
+                    openAtLogin: config.autoStart || false,
+                    path: process.execPath,
+                });
+            } catch (e) {
+                logger?.error('Failed to set login item settings', e);
+            }
+        }
+        
+        return { success: true };
+    } catch (error) {
+        logger?.error('Failed to save settings', error);
+        throw error;
     }
-    
-    // Handle auto-start setting
-    if (process.platform === 'win32') {
-        app.setLoginItemSettings({
-            openAtLogin: config.autoStart,
-            path: process.execPath,
-        });
-    }
-    
-    return { success: true };
 });
 
 // Logger handlers
@@ -635,6 +978,13 @@ ipcMain.handle('get-app-info', () => {
     };
 });
 
+ipcMain.handle('ping-server', async () => {
+    if (!apiService) {
+        return { online: false, latency: null };
+    }
+    return await apiService.ping();
+});
+
 // Minimize to tray setting
 ipcMain.handle('get-minimize-to-tray', () => {
     return store.get('minimizeToTray', true);
@@ -643,4 +993,120 @@ ipcMain.handle('get-minimize-to-tray', () => {
 ipcMain.handle('set-minimize-to-tray', (event, value) => {
     store.set('minimizeToTray', value);
     return { success: true };
+});
+
+// Diagnostic export for support
+ipcMain.handle('export-diagnostics', async () => {
+    try {
+        const diagnostics = {
+            timestamp: new Date().toISOString(),
+            app: {
+                version: app.getVersion(),
+                name: app.getName(),
+                platform: process.platform,
+                arch: process.arch,
+                electron: process.versions.electron,
+                node: process.versions.node,
+            },
+            config: {
+                apiUrl: store.get('config.apiUrl'),
+                watchedFolders: store.get('config.watchedFolders', []).length,
+                autoStart: store.get('config.autoStart'),
+            },
+            state: {
+                isRegistered: store.get('isRegistered'),
+                hasToken: !!store.get('token'),
+                deviceId: store.get('deviceId'),
+                agentId: store.get('agentId'),
+            },
+            services: {
+                sdCardService: sdCardService ? 'running' : 'stopped',
+                fileWatcherService: fileWatcherService ? 'running' : 'stopped',
+                activeSessions: sessionService?.getAllActiveSessions()?.length || 0,
+                pendingSync: apiService?.pendingSync?.length || 0,
+                isOnline: apiService?.isOnline || false,
+            },
+            logs: await logger?.getRecentLogs(200) || [],
+        };
+
+        const exportPath = path.join(app.getPath('desktop'), `gate1-diagnostics-${Date.now()}.json`);
+        const fs = require('fs').promises;
+        await fs.writeFile(exportPath, JSON.stringify(diagnostics, null, 2));
+        
+        shell.showItemInFolder(exportPath);
+        logger?.info('Diagnostics exported', { path: exportPath });
+        
+        return { success: true, path: exportPath };
+    } catch (error) {
+        logger?.error('Failed to export diagnostics', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Forget device / reset registration
+ipcMain.handle('forget-device', async () => {
+    try {
+        // Stop all services
+        sdCardService?.stop();
+        fileWatcherService?.stop();
+        mediaDeletionService?.stop();
+        
+        // Set user offline if possible
+        try {
+            if (apiService && store.get('token')) {
+                await apiService.setUserOffline();
+            }
+        } catch (e) {
+            // Ignore - might be offline
+        }
+        
+        // Clear all stored data
+        store.delete('token');
+        store.delete('user');
+        store.delete('deviceId');
+        store.delete('agentId');
+        store.delete('isRegistered');
+        store.delete('currentEventId');
+        store.delete('sessions');
+        
+        logger?.info('Device forgotten - registration cleared');
+        
+        return { success: true };
+    } catch (error) {
+        logger?.error('Failed to forget device', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Get sync queue status
+ipcMain.handle('get-sync-status', () => {
+    return {
+        pendingCount: apiService?.pendingSync?.length || 0,
+        isOnline: apiService?.isOnline || false,
+        pending: apiService?.pendingSync || [],
+    };
+});
+
+// Manual sync queue processing
+ipcMain.handle('process-sync-queue', async () => {
+    if (!apiService) return { processed: 0, failed: 0 };
+    return await apiService.processSyncQueue();
+});
+
+// Update API URL
+ipcMain.handle('update-api-url', async (event, newUrl) => {
+    try {
+        store.set('config.apiUrl', newUrl);
+        
+        // Reinitialize API service with new URL
+        if (apiService) {
+            apiService.baseUrl = newUrl;
+            apiService.client.defaults.baseURL = newUrl;
+        }
+        
+        logger?.info('API URL updated', { url: newUrl });
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 });

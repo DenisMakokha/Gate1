@@ -4,6 +4,8 @@ class ApiService {
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
         this.token = null;
+        this.isOnline = true;
+        this.pendingSync = []; // Queue for offline operations
         
         this.client = axios.create({
             baseURL: baseUrl,
@@ -21,12 +23,60 @@ class ApiService {
         });
 
         this.client.interceptors.response.use(
-            (response) => response.data,
+            (response) => {
+                this.isOnline = true;
+                return response.data;
+            },
             (error) => {
+                if (!error.response) {
+                    this.isOnline = false;
+                }
+                
+                // Handle token expiry (401 Unauthorized)
+                if (error.response?.status === 401) {
+                    this.token = null;
+                    this.onTokenExpired?.();
+                }
+                
                 console.error('API Error:', error.response?.data || error.message);
                 throw error.response?.data || error;
             }
         );
+    }
+
+    // Set callback for token expiry
+    setTokenExpiredCallback(callback) {
+        this.onTokenExpired = callback;
+    }
+
+    // Retry wrapper for critical operations
+    async withRetry(operation, maxRetries = 3, baseDelay = 1000) {
+        let lastError;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                return await operation();
+            } catch (error) {
+                lastError = error;
+                if (attempt < maxRetries - 1) {
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+        throw lastError;
+    }
+
+    // Queue operation for later sync when offline
+    queueForSync(type, data) {
+        this.pendingSync.push({ type, data, timestamp: Date.now() });
+    }
+
+    getPendingSync() {
+        return this.pendingSync;
+    }
+
+    clearSyncQueue() {
+        this.pendingSync = [];
     }
 
     setToken(token) {
@@ -35,6 +85,10 @@ class ApiService {
 
     async login(credentials) {
         return this.client.post('/auth/login', credentials);
+    }
+
+    async getGroups() {
+        return this.client.get('/groups/list');
     }
 
     async registerAgent(data) {
@@ -70,11 +124,44 @@ class ApiService {
     }
 
     async syncMedia(data) {
-        return this.client.post('/media/sync', data);
+        try {
+            return await this.client.post('/media/sync', data);
+        } catch (error) {
+            // Queue for later if offline
+            if (!this.isOnline) {
+                this.queueForSync('media', data);
+            }
+            throw error;
+        }
     }
 
     async batchSyncMedia(data) {
         return this.client.post('/media/batch-sync', data);
+    }
+
+    async processSyncQueue() {
+        if (this.pendingSync.length === 0) return { processed: 0, failed: 0 };
+        
+        let processed = 0;
+        let failed = 0;
+        const remaining = [];
+
+        for (const item of this.pendingSync) {
+            try {
+                if (item.type === 'media') {
+                    await this.client.post('/media/sync', item.data);
+                } else if (item.type === 'issue') {
+                    await this.client.post('/issues/report', item.data);
+                }
+                processed++;
+            } catch (error) {
+                failed++;
+                remaining.push(item);
+            }
+        }
+
+        this.pendingSync = remaining;
+        return { processed, failed, remaining: remaining.length };
     }
 
     async reportIssue(data) {
@@ -91,6 +178,11 @@ class ApiService {
 
     async getActiveEvents() {
         return this.client.get('/events/active');
+    }
+
+    async getEvent(eventId) {
+        const response = await this.client.get(`/events/${eventId}`);
+        return response.event || response;
     }
 
     async validateGroup(groupCode) {
@@ -121,6 +213,22 @@ class ApiService {
             status: status,
             error_message: errorMessage,
         });
+    }
+
+    async ping() {
+        const start = Date.now();
+        try {
+            await this.client.get('/health', { timeout: 5000 });
+            return { online: true, latency: Date.now() - start };
+        } catch (e) {
+            // Try heartbeat endpoint as fallback
+            try {
+                await this.client.options('/', { timeout: 5000 });
+                return { online: true, latency: Date.now() - start };
+            } catch (e2) {
+                return { online: false, latency: null };
+            }
+        }
     }
 }
 

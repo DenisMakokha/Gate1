@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export default function Profile() {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   
   const [profileData, setProfileData] = useState({
@@ -47,7 +47,6 @@ export default function Profile() {
     try {
       await userService.update(user.id, profileData);
       setMessage({ type: 'success', text: 'Profile updated successfully' });
-      if (refreshUser) refreshUser();
     } catch (error) {
       setMessage({ type: 'error', text: error.message || 'Failed to update profile' });
     } finally {

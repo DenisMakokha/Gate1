@@ -2,29 +2,49 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+
+// Auth pages
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Events from './pages/Events';
-import Groups from './pages/Groups';
-import Media from './pages/Media';
-import Issues from './pages/Issues';
-import Backups from './pages/Backups';
-import Users from './pages/Users';
-import AuditLogs from './pages/AuditLogs';
-import Profile from './pages/Profile';
+import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
-import Register from './pages/Register';
-import Settings from './pages/Settings';
-import Approvals from './pages/Approvals';
-import Analytics from './pages/Analytics';
+
+// Overview
+import Dashboard from './pages/Dashboard';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
+
+// Operations
+import Events from './pages/Events';
+import Groups from './pages/Groups';
 import Cameras from './pages/Cameras';
-import HealingCases from './pages/HealingCases';
-import BackupAnalytics from './pages/BackupAnalytics';
+
+// Media & Quality
+import Media from './pages/Media';
 import QualityControl from './pages/QualityControl';
+import Issues from './pages/Issues';
+import HealingCases from './pages/HealingCases';
+
+// Storage
+import Backups from './pages/Backups';
 import StorageForecast from './pages/StorageForecast';
 import DataProtection from './pages/DataProtection';
-import AnalyticsDashboard from './pages/AnalyticsDashboard';
+
+// Administration
+import Users from './pages/Users';
+import Approvals from './pages/Approvals';
+import AuditLogs from './pages/AuditLogs';
+import Settings from './pages/Settings';
+import Profile from './pages/Profile';
+
+// New Features
+import Notifications from './pages/Notifications';
+import Reports from './pages/Reports';
+import Shifts from './pages/Shifts';
+import ActivityFeed from './pages/ActivityFeed';
+import Help from './pages/Help';
+import WorkAllocation from './pages/WorkAllocation';
+import LiveOperations from './pages/LiveOperations';
+import Search from './pages/Search';
 
 function PrivateRoute({ children, roles }) {
   const { user, loading, hasAnyRole } = useAuth();
@@ -64,111 +84,135 @@ function App() {
             </PrivateRoute>
           } />
           
+          {/* Overview */}
+          <Route path="/analytics-dashboard" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <AnalyticsDashboard />
+            </PrivateRoute>
+          } />
+          <Route path="/live-operations" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <LiveOperations />
+            </PrivateRoute>
+          } />
+          
+          {/* Operations */}
           <Route path="/events" element={
-            <PrivateRoute roles={['admin']}>
+            <PrivateRoute roles={['admin', 'team-lead']}>
               <Events />
             </PrivateRoute>
           } />
-          
           <Route path="/groups" element={
-            <PrivateRoute roles={['admin', 'group-leader']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
               <Groups />
             </PrivateRoute>
           } />
+          <Route path="/cameras" element={
+            <PrivateRoute roles={['admin', 'team-lead']}>
+              <Cameras />
+            </PrivateRoute>
+          } />
           
+          {/* Media & Quality */}
+          <Route path="/search" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa']}>
+              <Search />
+            </PrivateRoute>
+          } />
           <Route path="/media" element={
-            <PrivateRoute roles={['admin']}>
+            <PrivateRoute roles={['admin', 'team-lead']}>
               <Media />
             </PrivateRoute>
           } />
-          
+          <Route path="/quality-control" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'qa', 'group-leader']}>
+              <QualityControl />
+            </PrivateRoute>
+          } />
           <Route path="/issues" element={
-            <PrivateRoute roles={['admin', 'group-leader', 'qa']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa']}>
               <Issues />
             </PrivateRoute>
           } />
+          <Route path="/healing-cases" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <HealingCases />
+            </PrivateRoute>
+          } />
           
+          {/* Storage */}
           <Route path="/backups" element={
-            <PrivateRoute roles={['admin', 'backup']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'backup']}>
               <Backups />
             </PrivateRoute>
           } />
-          
-          <Route path="/backup-analytics" element={
-            <PrivateRoute roles={['admin', 'backup']}>
-              <BackupAnalytics />
+          <Route path="/storage-forecast" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'backup']}>
+              <StorageForecast />
+            </PrivateRoute>
+          } />
+          <Route path="/data-protection" element={
+            <PrivateRoute roles={['admin', 'team-lead']}>
+              <DataProtection />
             </PrivateRoute>
           } />
           
+          {/* Administration */}
           <Route path="/users" element={
-            <PrivateRoute roles={['admin']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa-lead', 'backup-lead']}>
               <Users />
             </PrivateRoute>
           } />
-          
+          <Route path="/approvals" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <Approvals />
+            </PrivateRoute>
+          } />
           <Route path="/audit-logs" element={
             <PrivateRoute roles={['admin']}>
               <AuditLogs />
             </PrivateRoute>
           } />
-          
+          <Route path="/settings" element={
+            <PrivateRoute roles={['admin']}>
+              <Settings />
+            </PrivateRoute>
+          } />
           <Route path="/profile" element={
             <PrivateRoute>
               <Profile />
             </PrivateRoute>
           } />
           
-          <Route path="/settings" element={
-            <PrivateRoute roles={['admin']}>
-              <Settings />
+          {/* New Features */}
+          <Route path="/notifications" element={
+            <PrivateRoute>
+              <Notifications />
             </PrivateRoute>
           } />
-          
-          <Route path="/approvals" element={
-            <PrivateRoute roles={['admin', 'group-leader']}>
-              <Approvals />
+          <Route path="/reports" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <Reports />
             </PrivateRoute>
           } />
-          
-          <Route path="/analytics" element={
-            <PrivateRoute roles={['admin']}>
-              <Analytics />
+          <Route path="/shifts" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <Shifts />
             </PrivateRoute>
           } />
-          
-          <Route path="/cameras" element={
-            <PrivateRoute roles={['admin']}>
-              <Cameras />
+          <Route path="/activity-feed" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <ActivityFeed />
             </PrivateRoute>
           } />
-          
-          <Route path="/healing-cases" element={
-            <PrivateRoute roles={['admin', 'group-leader']}>
-              <HealingCases />
+          <Route path="/help" element={
+            <PrivateRoute>
+              <Help />
             </PrivateRoute>
           } />
-          
-          <Route path="/quality-control" element={
-            <PrivateRoute roles={['admin', 'qa', 'group-leader']}>
-              <QualityControl />
-            </PrivateRoute>
-          } />
-          
-          <Route path="/storage-forecast" element={
-            <PrivateRoute roles={['admin', 'backup']}>
-              <StorageForecast />
-            </PrivateRoute>
-          } />
-          
-          <Route path="/data-protection" element={
-            <PrivateRoute roles={['admin']}>
-              <DataProtection />
-            </PrivateRoute>
-          } />
-          
-          <Route path="/analytics-dashboard" element={
-            <PrivateRoute roles={['admin', 'group-leader']}>
-              <AnalyticsDashboard />
+          <Route path="/work-allocation" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <WorkAllocation />
             </PrivateRoute>
           } />
           

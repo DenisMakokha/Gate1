@@ -19,6 +19,20 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
+// Health Check Endpoint (public, no auth required)
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'healthy',
+        'app' => config('app.name'),
+        'version' => '1.0.0',
+        'timestamp' => now()->toISOString(),
+        'services' => [
+            'database' => \DB::connection()->getPdo() ? 'connected' : 'disconnected',
+            'cache' => \Cache::store()->getStore() ? 'connected' : 'disconnected',
+        ]
+    ]);
+});
+
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\RegistrationController;
 use App\Http\Controllers\Api\SettingsController;
@@ -30,10 +44,17 @@ use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\StorageForecastController;
 use App\Http\Controllers\Api\QualityControlController;
 use App\Http\Controllers\Api\MediaDeletionController;
+use App\Http\Controllers\Api\WorkAllocationController;
+
+// Health check endpoint (for agent ping)
+Route::get('/health', function () {
+    return response()->json(['status' => 'ok', 'timestamp' => now()->toISOString()]);
+});
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [RegistrationController::class, 'register']);
+Route::get('/groups/list', [GroupController::class, 'listForAgent']); // Public endpoint for agent setup
 Route::post('/auth/register/invitation', [RegistrationController::class, 'registerWithInvitation']);
 Route::get('/auth/invitation/{token}', [RegistrationController::class, 'checkInvitation']);
 Route::post('/auth/forgot-password', [PasswordResetController::class, 'forgotPassword']);
@@ -76,6 +97,10 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/search', [MediaController::class, 'search']);
         Route::get('/{mediaId}/status', [MediaController::class, 'status']);
         Route::post('/thumbnail', [MediaController::class, 'uploadThumbnail']);
+        Route::get('/{mediaId}/download-url', [MediaController::class, 'getDownloadUrl']);
+        Route::post('/{mediaId}/log-playback', [MediaController::class, 'logPlayback']);
+        Route::post('/{mediaId}/log-download', [MediaController::class, 'logDownload']);
+        Route::get('/{mediaId}/playback-source', [MediaController::class, 'getPlaybackSource']);
     });
 
     // Issue routes
@@ -98,6 +123,10 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/pending', [BackupController::class, 'pending']);
         Route::get('/analytics', [BackupController::class, 'analytics']);
         Route::get('/disk/{diskId}', [BackupController::class, 'diskStatus']);
+        Route::get('/pending-by-editor', [BackupController::class, 'pendingByEditor']);
+        Route::get('/pending-by-group', [BackupController::class, 'pendingByGroup']);
+        Route::get('/editor-disk-assignments', [BackupController::class, 'editorDiskAssignments']);
+        Route::get('/team-pending-total', [BackupController::class, 'teamPendingTotal']);
     });
 
     // Event routes
@@ -138,9 +167,10 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/comparative', [DashboardController::class, 'comparativeAnalytics']);
         Route::get('/predictive', [DashboardController::class, 'predictiveMetrics']);
         Route::get('/alerts', [DashboardController::class, 'alerts']);
+        Route::get('/live-operations', [DashboardController::class, 'liveOperations']);
     });
 
-    // User management routes (admin only)
+    // User management routes
     Route::prefix('users')->group(function () {
         Route::get('/', [UserController::class, 'index']);
         Route::post('/', [UserController::class, 'store']);
@@ -148,6 +178,14 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/editors-status', [UserController::class, 'editorsStatus']);
         Route::post('/heartbeat', [UserController::class, 'heartbeat']);
         Route::post('/offline', [UserController::class, 'setOffline']);
+        
+        // Bulk import and invitations
+        Route::post('/bulk-import', [UserController::class, 'bulkImport']);
+        Route::get('/import-template', [UserController::class, 'downloadTemplate']);
+        Route::get('/invitations', [UserController::class, 'listInvitations']);
+        Route::post('/invitations', [UserController::class, 'createInvitation']);
+        Route::delete('/invitations/{id}', [UserController::class, 'revokeInvitation']);
+        
         Route::get('/{id}', [UserController::class, 'show']);
         Route::put('/{id}', [UserController::class, 'update']);
         Route::delete('/{id}', [UserController::class, 'destroy']);
@@ -276,5 +314,13 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/event/{eventId}/trigger', [MediaDeletionController::class, 'triggerDeletion']);
         Route::get('/tasks', [MediaDeletionController::class, 'getPendingTasks']);
         Route::post('/tasks/complete', [MediaDeletionController::class, 'reportTaskCompletion']);
+    });
+
+    // Work Allocation routes
+    Route::prefix('work-allocation')->group(function () {
+        Route::get('/overview', [WorkAllocationController::class, 'overview']);
+        Route::post('/assign', [WorkAllocationController::class, 'assign']);
+        Route::post('/auto-distribute', [WorkAllocationController::class, 'autoDistribute']);
+        Route::post('/reassign', [WorkAllocationController::class, 'reassign']);
     });
 });

@@ -80,6 +80,11 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasRole('admin');
     }
 
+    public function isTeamLead(): bool
+    {
+        return $this->hasRole('team-lead');
+    }
+
     public function isEditor(): bool
     {
         return $this->hasRole('editor');
@@ -90,14 +95,63 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasRole('group-leader');
     }
 
+    public function isQALead(): bool
+    {
+        return $this->hasRole('qa-lead');
+    }
+
     public function isQA(): bool
     {
         return $this->hasRole('qa');
     }
 
+    public function isBackupLead(): bool
+    {
+        return $this->hasRole('backup-lead');
+    }
+
     public function isBackupTeam(): bool
     {
         return $this->hasRole('backup');
+    }
+
+    /**
+     * Check if user has operational admin access (admin or team-lead)
+     */
+    public function hasOperationalAccess(): bool
+    {
+        return $this->isAdmin() || $this->isTeamLead();
+    }
+
+    /**
+     * Check if user can manage other users (any lead role)
+     */
+    public function canManageUsers(): bool
+    {
+        return $this->isAdmin() || $this->isTeamLead() || $this->isGroupLeader() || $this->isQALead() || $this->isBackupLead();
+    }
+
+    /**
+     * Get the roles this user can assign to others
+     */
+    public function getManageableRoles(): array
+    {
+        if ($this->isAdmin()) {
+            return ['admin', 'team-lead', 'group-leader', 'qa-lead', 'qa', 'backup-lead', 'backup', 'editor'];
+        }
+        if ($this->isTeamLead()) {
+            return ['group-leader', 'qa-lead', 'qa', 'backup-lead', 'backup', 'editor'];
+        }
+        if ($this->isGroupLeader()) {
+            return ['editor'];
+        }
+        if ($this->isQALead()) {
+            return ['qa'];
+        }
+        if ($this->isBackupLead()) {
+            return ['backup'];
+        }
+        return [];
     }
 
     public function agents()

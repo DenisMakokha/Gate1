@@ -1,7 +1,7 @@
 {
   "name": "gate1-agent",
-  "version": "1.0.0",
-  "description": "Gate 1 System Desktop Agent for Editors",
+  "version": "1.1.0",
+  "description": "Gate 1 System Desktop Agent for Editors - Powered by Nelium Systems",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -12,7 +12,10 @@
     "pack": "electron-builder --dir",
     "package": "electron-packager . \"Gate 1 Agent\" --platform=win32 --arch=x64 --out=release --overwrite --asar"
   },
-  "author": "Gate 1 System",
+  "author": {
+    "name": "Nelium Systems",
+    "email": "support@neliumsystems.com"
+  },
   "license": "UNLICENSED",
   "devDependencies": {
     "electron": "^28.0.0",
@@ -28,49 +31,108 @@
     "drivelist": "^11.1.0",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
     "sharp": "^0.34.5"
   },
   "build": {
-    "appId": "org.gate1system.agent",
+    "appId": "com.neliumsystems.gate1agent",
     "productName": "Gate 1 Agent",
-    "copyright": "Copyright 2024 Gate 1 System",
+    "copyright": "Copyright © 2025 Nelium Systems. All rights reserved.",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "compression": "maximum",
+    "removePackageScripts": true,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sharp/**/*"
+    ],
     "directories": {
       "output": "build",
       "buildResources": "assets"
     },
     "files": [
       "src/**/*",
-      "assets/**/*"
+      "assets/icon.ico",
+      "assets/icon.png",
+      "assets/tray-icon.png",
+      "!**/*.map",
+      "!**/*.ts",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
     ],
     "win": {
       "target": [
         {
-          "target": "squirrel",
-          "arch": [
-            "x64"
-          ]
+          "target": "nsis",
+          "arch": ["x64"]
         }
       ],
-      "artifactName": "Gate1Agent-Setup-${version}.${ext}"
+      "icon": "assets/icon.ico",
+      "publisherName": "Nelium Systems",
+      "legalTrademarks": "Gate 1 Agent is a trademark of Nelium Systems",
+      "verifyUpdateCodeSignature": false,
+      "signingHashAlgorithms": ["sha256"],
+      "signDlls": false,
+      "sign": "./sign.js",
+      "certificateSubjectName": "Nelium Systems",
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Gate 1 Agent",
+      "menuCategory": "Nelium Systems",
       "runAfterFinish": true,
-      "license": "LICENSE.txt"
+      "deleteAppDataOnUninstall": false,
+      "license": "LICENSE.txt",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "installerHeader": "assets/header.bmp",
+      "installerSidebar": "assets/wizard.bmp",
+      "uninstallerSidebar": "assets/wizard.bmp",
+      "displayLanguageSelector": false,
+      "installerLanguages": ["en_US"],
+      "language": "1033"
     },
     "mac": {
       "target": "dmg",
       "icon": "assets/icon.icns",
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "identity": "Nelium Systems",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "backgroundColor": "#1a1f35",
+      "title": "Gate 1 Agent",
+      "icon": "assets/icon.icns"
     },
     "linux": {
-      "target": "AppImage",
+      "target": ["AppImage", "deb"],
       "icon": "assets/icon.png",
-      "category": "Office"
+      "category": "Office",
+      "vendor": "Nelium Systems",
+      "synopsis": "Desktop agent for Gate 1 media workflow",
+      "description": "Gate 1 Agent monitors SD cards and folders, tracks file operations, and syncs media metadata with the Gate 1 System."
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://updates.neliumsystems.com/gate1-agent"
     }
   }
 }

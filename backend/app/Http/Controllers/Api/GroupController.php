@@ -12,6 +12,21 @@ use Illuminate\Support\Str;
 
 class GroupController extends Controller
 {
+    /**
+     * Public endpoint for agent setup - returns simple list of groups
+     */
+    public function listForAgent(Request $request): JsonResponse
+    {
+        $groups = Group::select('id', 'group_code', 'name')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'groups' => $groups,
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = auth('api')->user();

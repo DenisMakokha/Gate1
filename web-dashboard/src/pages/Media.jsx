@@ -1,37 +1,96 @@
 import React, { useState, useEffect } from 'react';
-import { mediaService, eventService } from '../services/api';
-import { Search, Video, Filter, Download, Eye, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { mediaService } from '../services/api';
+import { Search, Video, Filter, Download, Eye, AlertTriangle, Play, X, Lock } from 'lucide-react';
+
+// Video Playback Modal Component
+function PlaybackModal({ media, onClose }) {
+  if (!media) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div>
+            <h3 className="font-semibold text-gray-900">{media.filename}</h3>
+            <p className="text-sm text-gray-500">{media.media_id}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="aspect-video bg-black">
+          {media.preview_url ? (
+            <video
+              controls
+              autoPlay
+              className="w-full h-full"
+              src={media.preview_url}
+            >
+              Your browser does not support video playback.
+            </video>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <div className="text-center">
+                <Video className="w-16 h-16 mx-auto mb-2 opacity-50" />
+                <p>Preview not available</p>
+                <p className="text-sm">File is stored on backup disk</p>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="p-4 bg-gray-50">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Person:</span>
+              <span className="ml-2 font-medium">{media.full_name || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Condition:</span>
+              <span className="ml-2 font-medium">{media.condition || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Region:</span>
+              <span className="ml-2 font-medium">{media.region || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Status:</span>
+              <span className="ml-2 font-medium">{media.status}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Media() {
+  const { activeEvent, isQA, isQALead, isBackup, isBackupLead, isAdmin, isTeamLead, isGroupLeader } = useAuth();
   const [media, setMedia] = useState([]);
-  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [playbackMedia, setPlaybackMedia] = useState(null);
+  
+  // Role-based access: QA can only search by issue, not by name/region per blueprint
+  const isQARole = isQA() || isQALead();
+  const isBackupRole = isBackup() || isBackupLead();
+  const hasFullSearch = isAdmin() || isTeamLead() || isGroupLeader();
+  
   const [filters, setFilters] = useState({
     full_name: '',
     condition: '',
     region: '',
-    event_id: '',
     status: '',
     type: '',
+    page: 1,
   });
-  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1 });
-
-  useEffect(() => {
-    loadEvents();
-  }, []);
+  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
 
   useEffect(() => {
     loadMedia();
-  }, [filters]);
-
-  const loadEvents = async () => {
-    try {
-      const response = await eventService.getActive();
-      setEvents(response || []);
-    } catch (error) {
-      console.error('Failed to load events:', error);
-    }
-  };
+  }, [filters, activeEvent?.id]);
 
   const loadMedia = async () => {
     setLoading(true);
@@ -39,11 +98,15 @@ export default function Media() {
       const params = Object.fromEntries(
         Object.entries(filters).filter(([_, v]) => v !== '')
       );
+      if (activeEvent?.id) {
+        params.event_id = activeEvent.id;
+      }
       const response = await mediaService.search(params);
       setMedia(response.data || []);
       setPagination({
-        current_page: response.current_page,
-        last_page: response.last_page,
+        current_page: response.current_page || 1,
+        last_page: response.last_page || 1,
+        total: response.total || 0,
       });
     } catch (error) {
       console.error('Failed to load media:', error);
@@ -54,7 +117,11 @@ export default function Media() {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    loadMedia();
+    setFilters({ ...filters, page: 1 });
+  };
+
+  const handlePageChange = (newPage) => {
+    setFilters({ ...filters, page: newPage });
   };
 
   const statusColors = {
@@ -77,56 +144,73 @@ export default function Media() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Media Search</h1>
-        <p className="text-gray-500">Search and browse all indexed media files</p>
+        <p className="text-gray-500">
+          {isQARole 
+            ? 'Search media with issues — you cannot search by name or region'
+            : isBackupRole
+            ? 'View backup status — you see coverage, not content'
+            : 'Search and browse all indexed media files'
+          }
+        </p>
       </div>
+      
+      {/* Role restriction notice */}
+      {isQARole && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-sm text-purple-700 flex items-center gap-2">
+          <Lock className="w-4 h-4" />
+          <span><strong>QA Access:</strong> You can only search by issue status. Name, region, and clean footage are hidden.</span>
+        </div>
+      )}
+      {isBackupRole && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700 flex items-center gap-2">
+          <Lock className="w-4 h-4" />
+          <span><strong>Backup Access:</strong> You see file status and coverage only. No content playback available.</span>
+        </div>
+      )}
 
       {/* Search Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <form onSubmit={handleSearch} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-              <input
-                type="text"
-                value={filters.full_name}
-                onChange={(e) => setFilters({ ...filters, full_name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                placeholder="Search name..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Condition</label>
-              <input
-                type="text"
-                value={filters.condition}
-                onChange={(e) => setFilters({ ...filters, condition: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., Cripple"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Region</label>
-              <input
-                type="text"
-                value={filters.region}
-                onChange={(e) => setFilters({ ...filters, region: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., Kisumu"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Event</label>
-              <select
-                value={filters.event_id}
-                onChange={(e) => setFilters({ ...filters, event_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Events</option>
-                {events.map((event) => (
-                  <option key={event.id} value={event.id}>{event.name}</option>
-                ))}
-              </select>
-            </div>
+            {/* Name - hidden for QA and Backup */}
+            {hasFullSearch && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={filters.full_name}
+                  onChange={(e) => setFilters({ ...filters, full_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="Search name..."
+                />
+              </div>
+            )}
+            {/* Condition - hidden for Backup */}
+            {!isBackupRole && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Condition</label>
+                <input
+                  type="text"
+                  value={filters.condition}
+                  onChange={(e) => setFilters({ ...filters, condition: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Cripple"
+                />
+              </div>
+            )}
+            {/* Region - hidden for QA and Backup */}
+            {hasFullSearch && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Region</label>
+                <input
+                  type="text"
+                  value={filters.region}
+                  onChange={(e) => setFilters({ ...filters, region: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Kisumu"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
               <select
@@ -179,9 +263,9 @@ export default function Media() {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">File</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Person</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Condition</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Region</th>
+                  {hasFullSearch && <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Person</th>}
+                  {!isBackupRole && <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Condition</th>}
+                  {hasFullSearch && <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Region</th>}
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Size</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -208,14 +292,16 @@ export default function Media() {
                         </div>
                       </div>
                     </td>
+                    {hasFullSearch && (
                     <td className="px-6 py-4">
                       <div>
                         <p className="text-sm text-gray-900">{item.full_name || '-'}</p>
                         <p className="text-xs text-gray-500">{item.age ? `${item.age} years` : '-'}</p>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{item.condition || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{item.region || '-'}</td>
+                    )}
+                    {!isBackupRole && <td className="px-6 py-4 text-sm text-gray-900">{item.condition || '-'}</td>}
+                    {hasFullSearch && <td className="px-6 py-4 text-sm text-gray-900">{item.region || '-'}</td>}
                     <td className="px-6 py-4 text-sm text-gray-500">{formatBytes(item.size_bytes)}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -229,7 +315,21 @@ export default function Media() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
-                        <button className="p-2 text-blue-600 hover:bg-blue-50 rounded" title="View">
+                        {/* Playback - available for Admin, Team Lead, Group Leader, and QA (for issues only) */}
+                        {!isBackupRole && (hasFullSearch || (isQARole && item.issues?.length > 0)) && (
+                          <button 
+                            onClick={() => setPlaybackMedia(item)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded" 
+                            title="Play"
+                          >
+                            <Play className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setPlaybackMedia(item)}
+                          className="p-2 text-gray-600 hover:bg-gray-50 rounded" 
+                          title="View Details"
+                        >
                           <Eye className="w-4 h-4" />
                         </button>
                       </div>
@@ -245,18 +345,20 @@ export default function Media() {
         {pagination.last_page > 1 && (
           <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
             <p className="text-sm text-gray-500">
-              Page {pagination.current_page} of {pagination.last_page}
+              Page {pagination.current_page} of {pagination.last_page} ({pagination.total} total)
             </p>
             <div className="flex gap-2">
               <button
+                onClick={() => handlePageChange(pagination.current_page - 1)}
                 disabled={pagination.current_page === 1}
-                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
               >
                 Previous
               </button>
               <button
+                onClick={() => handlePageChange(pagination.current_page + 1)}
                 disabled={pagination.current_page === pagination.last_page}
-                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
               >
                 Next
               </button>
@@ -264,6 +366,14 @@ export default function Media() {
           </div>
         )}
       </div>
+      
+      {/* Playback Modal */}
+      {playbackMedia && (
+        <PlaybackModal 
+          media={playbackMedia} 
+          onClose={() => setPlaybackMedia(null)} 
+        />
+      )}
     </div>
   );
 }

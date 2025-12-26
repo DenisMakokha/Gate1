@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { activityFeedService, eventService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { activityFeedService } from '../services/api';
 import {
   Activity,
   Copy,
@@ -63,33 +64,19 @@ function ActivityItem({ activity }) {
 }
 
 export default function ActivityFeed({ compact = false, limit = 20 }) {
+  const { activeEvent } = useAuth();
   const [activities, setActivities] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [selectedEvent, setSelectedEvent] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadEvents();
-  }, []);
-
-  useEffect(() => {
     loadActivities();
-  }, [selectedEvent]);
-
-  const loadEvents = async () => {
-    try {
-      const response = await eventService.getAll();
-      setEvents(response.data || response || []);
-    } catch (error) {
-      console.error('Failed to load events:', error);
-    }
-  };
+  }, [activeEvent?.id]);
 
   const loadActivities = async () => {
     try {
       setLoading(true);
       const response = await activityFeedService.getAll({
-        event_id: selectedEvent || undefined,
+        event_id: activeEvent?.id,
         limit,
       });
       setActivities(response.activities || []);
@@ -131,29 +118,22 @@ export default function ActivityFeed({ compact = false, limit = 20 }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Activity Feed</h2>
-        <div className="flex items-center gap-3">
-          <select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-          >
-            <option value="">All Events</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={loadActivities}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors text-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Activity Feed</h2>
+          {activeEvent && (
+            <p className="text-sm text-gray-500">
+              Event: <span className="font-medium text-sky-600">{activeEvent.name}</span>
+            </p>
+          )}
         </div>
+        <button
+          onClick={loadActivities}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors text-sm"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">

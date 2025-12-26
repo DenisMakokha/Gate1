@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authService } from '../services/api';
+import { authService, eventService } from '../services/api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [activeEvent, setActiveEvent] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -13,9 +14,15 @@ export function AuthProvider({ children }) {
     
     if (token && savedUser) {
       setUser(JSON.parse(savedUser));
-      authService.me().then(response => {
-        setUser(response.user);
-        localStorage.setItem('user', JSON.stringify(response.user));
+      
+      // Load user and active event in parallel
+      Promise.all([
+        authService.me(),
+        eventService.getActive().catch(() => ({ event: null }))
+      ]).then(([userRes, eventRes]) => {
+        setUser(userRes.user);
+        localStorage.setItem('user', JSON.stringify(userRes.user));
+        setActiveEvent(eventRes.event || eventRes.data || null);
       }).catch(() => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -25,6 +32,17 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   }, []);
+
+  const refreshActiveEvent = async () => {
+    try {
+      const response = await eventService.getActive();
+      setActiveEvent(response.event || response.data || null);
+      return response.event || response.data || null;
+    } catch (e) {
+      setActiveEvent(null);
+      return null;
+    }
+  };
 
   const login = async (email, password) => {
     const response = await authService.login({ email, password });
@@ -54,24 +72,40 @@ export function AuthProvider({ children }) {
   };
 
   const isAdmin = () => hasRole('admin');
+  const isTeamLead = () => hasRole('team-lead');
   const isGroupLeader = () => hasRole('group-leader');
+  const isQALead = () => hasRole('qa-lead');
   const isQA = () => hasRole('qa');
+  const isBackupLead = () => hasRole('backup-lead');
   const isBackup = () => hasRole('backup');
   const isEditor = () => hasRole('editor');
+  
+  // Helper: Has operational admin rights (admin or team-lead)
+  const hasOperationalAccess = () => isAdmin() || isTeamLead();
+  
+  // Helper: Can manage users (any lead role)
+  const canManageUsers = () => isAdmin() || isTeamLead() || isGroupLeader() || isQALead() || isBackupLead();
 
   return (
     <AuthContext.Provider value={{
       user,
+      activeEvent,
       loading,
       login,
       logout,
+      refreshActiveEvent,
       hasRole,
       hasAnyRole,
       isAdmin,
+      isTeamLead,
       isGroupLeader,
+      isQALead,
       isQA,
+      isBackupLead,
       isBackup,
       isEditor,
+      hasOperationalAccess,
+      canManageUsers,
     }}>
       {children}
     </AuthContext.Provider>

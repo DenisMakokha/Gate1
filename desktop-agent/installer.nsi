@@ -6,9 +6,9 @@
 
 ; Application Info
 !define PRODUCT_NAME "Gate 1 Agent"
-!define PRODUCT_VERSION "1.0.0"
-!define PRODUCT_PUBLISHER "Gate 1 System"
-!define PRODUCT_WEB_SITE "https://gate1system.org"
+!define PRODUCT_VERSION "1.1.0"
+!define PRODUCT_PUBLISHER "Nelium Systems"
+!define PRODUCT_WEB_SITE "https://neliumsystems.com/gate1"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
 
@@ -42,7 +42,7 @@ SetCompressor /SOLID lzma
 
 ; Welcome page settings
 !define MUI_WELCOMEPAGE_TITLE "Welcome to ${PRODUCT_NAME} Setup"
-!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${PRODUCT_NAME} ${PRODUCT_VERSION}.$\r$\n$\r$\n${PRODUCT_NAME} is the desktop component of the Gate 1 System for managing and syncing media files from SD cards.$\r$\n$\r$\nFeatures:$\r$\n  - Automatic SD card detection$\r$\n  - Secure file synchronization$\r$\n  - Real-time progress tracking$\r$\n  - Background operation$\r$\n$\r$\nClick Next to continue."
+!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${PRODUCT_NAME} ${PRODUCT_VERSION}.$\r$\n$\r$\n${PRODUCT_NAME} is the desktop component of the Gate 1 System for managing and syncing media files from SD cards.$\r$\n$\r$\nFeatures:$\r$\n  - Automatic SD card detection$\r$\n  - Secure file synchronization$\r$\n  - Real-time progress tracking$\r$\n  - Backup disk support$\r$\n  - Audio track detection$\r$\n  - Data protection auto-cleanup$\r$\n  - Gigi mascot assistant$\r$\n$\r$\nClick Next to continue."
 
 ; License page settings
 !define MUI_LICENSEPAGE_TEXT_TOP "Please review the license terms before installing ${PRODUCT_NAME}."
@@ -85,7 +85,7 @@ SetCompressor /SOLID lzma
 VIProductVersion "${PRODUCT_VERSION}.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "CompanyName" "${PRODUCT_PUBLISHER}"
-VIAddVersionKey "LegalCopyright" "Copyright 2024 ${PRODUCT_PUBLISHER}"
+VIAddVersionKey "LegalCopyright" "Copyright 2025 ${PRODUCT_PUBLISHER}"
 VIAddVersionKey "FileDescription" "${PRODUCT_NAME} Installer"
 VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"

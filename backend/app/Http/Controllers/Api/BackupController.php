@@ -405,6 +405,189 @@ class BackupController extends Controller
     }
 
     /**
+     * Get pending (not backed up) clips by editor with last backup disk
+     */
+    public function pendingByEditor(Request $request): JsonResponse
+    {
+        $eventId = $request->input('event_id');
+
+        // Get all editors with pending clips
+        $editors = \App\Models\User::whereHas('roles', fn($q) => $q->where('name', 'editor'))
+            ->with(['group'])
+            ->get()
+            ->map(function ($editor) use ($eventId) {
+                // Count renamed but not backed up clips
+                $pendingQuery = Media::where('editor_id', $editor->id)
+                    ->where('status', 'renamed')
+                    ->whereDoesntHave('backups')
+                    ->when($eventId, fn($q) => $q->where('event_id', $eventId));
+
+                $pendingClips = $pendingQuery->count();
+                $pendingSize = $pendingQuery->sum('file_size');
+
+                // Get last backup disk used by this editor
+                $lastBackup = Backup::whereHas('media', fn($q) => $q->where('editor_id', $editor->id))
+                    ->orderBy('created_at', 'desc')
+                    ->with('disk')
+                    ->first();
+
+                return [
+                    'id' => $editor->id,
+                    'name' => $editor->name,
+                    'group_code' => $editor->group?->group_code ?? 'N/A',
+                    'pending_clips' => $pendingClips,
+                    'pending_size' => $pendingSize,
+                    'pending_size_formatted' => $this->formatBytes($pendingSize),
+                    'last_backup_disk' => $lastBackup?->disk?->name,
+                    'last_backup_disk_id' => $lastBackup?->backup_disk_id,
+                    'last_backup_time' => $lastBackup?->created_at?->diffForHumans(),
+                    'last_backup_path' => $lastBackup?->backup_path,
+                ];
+            })
+            ->filter(fn($e) => $e['pending_clips'] > 0)
+            ->sortByDesc('pending_clips')
+            ->values();
+
+        return response()->json([
+            'data' => $editors,
+            'total_editors' => $editors->count(),
+            'total_pending_clips' => $editors->sum('pending_clips'),
+            'total_pending_size' => $this->formatBytes($editors->sum('pending_size')),
+        ]);
+    }
+
+    /**
+     * Get pending (not backed up) clips by group
+     */
+    public function pendingByGroup(Request $request): JsonResponse
+    {
+        $eventId = $request->input('event_id');
+
+        $groups = \App\Models\Group::with(['media' => function ($q) use ($eventId) {
+            $q->where('status', 'renamed')
+                ->when($eventId, fn($q2) => $q2->where('event_id', $eventId));
+        }])->get()->map(function ($group) {
+            $totalRenamed = $group->media->count();
+            $backedUp = $group->media->filter(fn($m) => $m->backups()->exists())->count();
+            $pending = $totalRenamed - $backedUp;
+            $pendingSize = $group->media->filter(fn($m) => !$m->backups()->exists())->sum('file_size');
+
+            return [
+                'id' => $group->id,
+                'group_code' => $group->group_code,
+                'name' => $group->name,
+                'total_renamed' => $totalRenamed,
+                'backed_up' => $backedUp,
+                'pending_clips' => $pending,
+                'pending_size' => $pendingSize,
+                'pending_size_formatted' => $this->formatBytes($pendingSize),
+            ];
+        })->filter(fn($g) => $g['pending_clips'] > 0)
+            ->sortByDesc('pending_clips')
+            ->values();
+
+        return response()->json([
+            'data' => $groups,
+            'total_groups' => $groups->count(),
+            'total_pending_clips' => $groups->sum('pending_clips'),
+            'total_pending_size' => $this->formatBytes($groups->sum('pending_size')),
+        ]);
+    }
+
+    /**
+     * Get editor disk assignments - which disk each editor should use for backup
+     */
+    public function editorDiskAssignments(Request $request): JsonResponse
+    {
+        // Get all editors with their last used backup disk
+        $assignments = \App\Models\User::whereHas('roles', fn($q) => $q->where('name', 'editor'))
+            ->get()
+            ->map(function ($editor) {
+                $lastBackup = Backup::whereHas('media', fn($q) => $q->where('editor_id', $editor->id))
+                    ->orderBy('created_at', 'desc')
+                    ->with('disk')
+                    ->first();
+
+                // Get the folder path pattern from last backup
+                $folderPath = null;
+                if ($lastBackup?->backup_path) {
+                    $folderPath = dirname($lastBackup->backup_path);
+                }
+
+                return [
+                    'editor_id' => $editor->id,
+                    'editor_name' => $editor->name,
+                    'assigned_disk_id' => $lastBackup?->backup_disk_id,
+                    'assigned_disk_name' => $lastBackup?->disk?->name,
+                    'folder_path' => $folderPath,
+                    'last_backup_at' => $lastBackup?->created_at,
+                    'total_backups' => Backup::whereHas('media', fn($q) => $q->where('editor_id', $editor->id))->count(),
+                ];
+            })
+            ->sortBy('editor_name')
+            ->values();
+
+        return response()->json([
+            'data' => $assignments,
+            'total_editors' => $assignments->count(),
+            'editors_with_disk' => $assignments->filter(fn($a) => $a['assigned_disk_id'])->count(),
+            'editors_without_disk' => $assignments->filter(fn($a) => !$a['assigned_disk_id'])->count(),
+        ]);
+    }
+
+    /**
+     * Get team-wide pending backup totals
+     */
+    public function teamPendingTotal(Request $request): JsonResponse
+    {
+        $eventId = $request->input('event_id');
+
+        // Total renamed clips not backed up
+        $pendingQuery = Media::where('status', 'renamed')
+            ->whereDoesntHave('backups')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId));
+
+        $pendingClips = $pendingQuery->count();
+        $pendingSize = $pendingQuery->sum('file_size');
+
+        // Total renamed clips
+        $totalRenamed = Media::where('status', 'renamed')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->count();
+
+        // Total backed up
+        $totalBackedUp = Media::where('status', 'renamed')
+            ->whereHas('backups')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->count();
+
+        // Editors with pending
+        $editorsWithPending = Media::where('status', 'renamed')
+            ->whereDoesntHave('backups')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->distinct('editor_id')
+            ->count('editor_id');
+
+        // Groups with pending
+        $groupsWithPending = Media::where('status', 'renamed')
+            ->whereDoesntHave('backups')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->distinct('group_id')
+            ->count('group_id');
+
+        return response()->json([
+            'pending_clips' => $pendingClips,
+            'pending_size' => $pendingSize,
+            'pending_size_formatted' => $this->formatBytes($pendingSize),
+            'total_renamed' => $totalRenamed,
+            'total_backed_up' => $totalBackedUp,
+            'backup_percentage' => $totalRenamed > 0 ? round(($totalBackedUp / $totalRenamed) * 100, 1) : 100,
+            'editors_with_pending' => $editorsWithPending,
+            'groups_with_pending' => $groupsWithPending,
+        ]);
+    }
+
+    /**
      * Format bytes to human readable format
      */
     private function formatBytes($bytes): string

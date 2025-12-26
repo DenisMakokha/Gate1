@@ -94,7 +94,7 @@ function GroupCard({ group, onPress }) {
 }
 
 export default function DashboardScreen({ navigation }) {
-  const { user, isGroupLeader, isQA, isBackup } = useAuth();
+  const { user, isAdmin, isTeamLead, isGroupLeader, isQA, isQARole, isBackup, isBackupRole, hasOperationalAccess } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,11 +102,14 @@ export default function DashboardScreen({ navigation }) {
   const loadData = useCallback(async () => {
     try {
       let response;
-      if (isGroupLeader()) {
+      // Admin/Team Lead get admin dashboard
+      if (hasOperationalAccess()) {
+        response = await dashboardService.getAdmin();
+      } else if (isGroupLeader()) {
         response = await dashboardService.getGroupLeader();
-      } else if (isQA()) {
+      } else if (isQARole()) {
         response = await dashboardService.getQA();
-      } else if (isBackup()) {
+      } else if (isBackupRole()) {
         response = await dashboardService.getBackup();
       } else {
         response = await dashboardService.getGroupLeader();
@@ -118,7 +121,7 @@ export default function DashboardScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isGroupLeader, isQA, isBackup]);
+  }, [hasOperationalAccess, isGroupLeader, isQARole, isBackupRole]);
 
   useEffect(() => {
     loadData();
@@ -187,8 +190,64 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </LinearGradient>
 
+      {/* Admin/Team Lead Quick Actions */}
+      {hasOperationalAccess() && (
+        <>
+          <TouchableOpacity 
+            style={styles.teamStatusCard}
+            onPress={() => navigation.navigate('TeamStatus')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#ef4444', '#dc2626']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.teamStatusGradient}
+            >
+              <View style={styles.teamStatusLeft}>
+                <View style={[styles.teamStatusIconBg, { backgroundColor: '#fff' }]}>
+                  <Ionicons name="pulse" size={24} color="#ef4444" />
+                </View>
+                <View>
+                  <Text style={styles.teamStatusTitle}>Live Operations</Text>
+                  <Text style={styles.teamStatusSubtitle}>
+                    {data?.active_sessions || 0} active sessions • {data?.camera_health?.unhealthy || 0} cameras need attention
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.teamStatusCard}
+            onPress={() => navigation.navigate('Search')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#0ea5e9', '#0284c7']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.teamStatusGradient}
+            >
+              <View style={styles.teamStatusLeft}>
+                <View style={[styles.teamStatusIconBg, { backgroundColor: '#fff' }]}>
+                  <Ionicons name="search" size={24} color="#0ea5e9" />
+                </View>
+                <View>
+                  <Text style={styles.teamStatusTitle}>Search & Playback</Text>
+                  <Text style={styles.teamStatusSubtitle}>
+                    Global search across all indexed media
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </>
+      )}
+
       {/* Team Status Quick Action - Only for Group Leaders */}
-      {isGroupLeader() && (
+      {isGroupLeader() && !hasOperationalAccess() && (
         <TouchableOpacity 
           style={styles.teamStatusCard}
           onPress={() => navigation.navigate('TeamStatus')}
@@ -245,33 +304,85 @@ export default function DashboardScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      {/* Backup Analytics Quick Action - Only for Backup Team */}
-      {isBackup() && (
-        <TouchableOpacity 
-          style={styles.teamStatusCard}
-          onPress={() => navigation.navigate('BackupAnalytics')}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#0ea5e9', '#0284c7']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.teamStatusGradient}
+      {/* Backup Operations Quick Actions - Critical for Backup Team */}
+      {isBackupRole() && (
+        <>
+          <TouchableOpacity 
+            style={styles.teamStatusCard}
+            onPress={() => navigation.navigate('Backups')}
+            activeOpacity={0.8}
           >
-            <View style={styles.teamStatusLeft}>
-              <View style={[styles.teamStatusIconBg, { backgroundColor: '#fff' }]}>
-                <Ionicons name="stats-chart" size={24} color="#0ea5e9" />
+            <LinearGradient
+              colors={['#10b981', '#059669']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.teamStatusGradient}
+            >
+              <View style={styles.teamStatusLeft}>
+                <View style={[styles.teamStatusIconBg, { backgroundColor: '#fff' }]}>
+                  <Ionicons name="cloud-upload" size={24} color="#10b981" />
+                </View>
+                <View>
+                  <Text style={styles.teamStatusTitle}>Backup Operations</Text>
+                  <Text style={styles.teamStatusSubtitle}>
+                    {data?.pending_backups || 0} pending • Real-time monitoring
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.teamStatusTitle}>Backup Analytics</Text>
-                <Text style={styles.teamStatusSubtitle}>
-                  View coverage by group & editor
-                </Text>
+              <Ionicons name="chevron-forward" size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.teamStatusCard}
+            onPress={() => navigation.navigate('BackupAnalytics')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#0ea5e9', '#0284c7']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.teamStatusGradient}
+            >
+              <View style={styles.teamStatusLeft}>
+                <View style={[styles.teamStatusIconBg, { backgroundColor: '#fff' }]}>
+                  <Ionicons name="stats-chart" size={24} color="#0ea5e9" />
+                </View>
+                <View>
+                  <Text style={styles.teamStatusTitle}>Coverage Analytics</Text>
+                  <Text style={styles.teamStatusSubtitle}>
+                    {data?.backup_percentage || 0}% coverage • By editor & group
+                  </Text>
+                </View>
               </View>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
+              <Ionicons name="chevron-forward" size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.teamStatusCard}
+            onPress={() => navigation.navigate('BackupOperations')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#6366f1', '#4f46e5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.teamStatusGradient}
+            >
+              <View style={styles.teamStatusLeft}>
+                <View style={[styles.teamStatusIconBg, { backgroundColor: '#fff' }]}>
+                  <Ionicons name="hardware-chip" size={24} color="#6366f1" />
+                </View>
+                <View>
+                  <Text style={styles.teamStatusTitle}>Disk Status</Text>
+                  <Text style={styles.teamStatusSubtitle}>
+                    Monitor disk health & capacity
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </>
       )}
 
       {/* Stats */}

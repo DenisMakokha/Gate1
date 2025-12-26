@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { dashboardService, eventService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { dashboardService } from '../services/api';
 import {
   Copy,
   FileText,
@@ -76,33 +77,19 @@ function StatCard({ title, value, subtitle, icon: Icon, color, percentage, secon
 }
 
 export default function WorkflowProgress() {
+  const { activeEvent } = useAuth();
   const [data, setData] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [selectedEvent, setSelectedEvent] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
-    loadEvents();
-  }, []);
-
-  useEffect(() => {
     loadProgress();
-  }, [selectedEvent]);
-
-  const loadEvents = async () => {
-    try {
-      const response = await eventService.getAll();
-      setEvents(response.data || response || []);
-    } catch (error) {
-      console.error('Failed to load events:', error);
-    }
-  };
+  }, [activeEvent?.id]);
 
   const loadProgress = async () => {
     try {
       setLoading(true);
-      const response = await dashboardService.getWorkflowProgress(selectedEvent || undefined);
+      const response = await dashboardService.getWorkflowProgress(activeEvent?.id);
       setData(response);
     } catch (error) {
       console.error('Failed to load workflow progress:', error);
@@ -127,30 +114,22 @@ export default function WorkflowProgress() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Workflow Progress</h2>
-          <p className="text-gray-500 text-sm">Copy & rename progress tracking</p>
+          <p className="text-gray-500 text-sm">
+            {activeEvent ? (
+              <>Event: <span className="font-medium text-sky-600">{activeEvent.name}</span></>
+            ) : (
+              'Copy & rename progress tracking'
+            )}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-          >
-            <option value="">All Events</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={loadProgress}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors text-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
+        <button
+          onClick={loadProgress}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors text-sm"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
       {/* Overall Stats */}

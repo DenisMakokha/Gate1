@@ -1,7 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Production: https://api.gate1.cloud/api
+// Development: http://localhost:8000/api
+const API_BASE_URL = __DEV__ 
+  ? 'http://localhost:8000/api' 
+  : 'https://api.gate1.cloud/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -34,11 +38,13 @@ export const authService = {
 };
 
 export const dashboardService = {
+  getAdmin: () => api.get('/dashboard/admin'),
   getGroupLeader: () => api.get('/dashboard/group-leader'),
   getQA: () => api.get('/dashboard/qa'),
   getBackup: () => api.get('/dashboard/backup'),
   getEditor: () => api.get('/dashboard/editor'),
   getWorkflowProgress: (eventId) => api.get('/dashboard/workflow-progress', { params: { event_id: eventId } }),
+  getLiveOperations: (eventId) => api.get('/dashboard/live-operations', { params: { event_id: eventId } }),
 };
 
 export const issueService = {
@@ -60,6 +66,19 @@ export const backupService = {
   getCoverage: () => api.get('/backup/coverage'),
   getPending: (params) => api.get('/backup/pending', { params }),
   getAnalytics: (eventId) => api.get('/backup/analytics', { params: { event_id: eventId } }),
+  getPendingByEditor: () => api.get('/backup/pending-by-editor'),
+  getPendingByGroup: () => api.get('/backup/pending-by-group'),
+  getEditorDiskAssignments: () => api.get('/backup/editor-disk-assignments'),
+  getTeamPendingTotal: () => api.get('/backup/team-pending-total'),
+};
+
+export const mediaService = {
+  search: (params) => api.get('/media/search', { params }),
+  getStatus: (mediaId) => api.get(`/media/${mediaId}/status`),
+  getDownloadUrl: (mediaId) => api.get(`/media/${mediaId}/download-url`),
+  logPlayback: (mediaId, data) => api.post(`/media/${mediaId}/log-playback`, data),
+  logDownload: (mediaId, data) => api.post(`/media/${mediaId}/log-download`, data),
+  getPlaybackSource: (mediaId) => api.get(`/media/${mediaId}/playback-source`),
 };
 
 export const userService = {

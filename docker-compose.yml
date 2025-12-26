@@ -1,0 +1,118 @@
+# Gate1 System - Docker Compose Configuration
+# CANONICAL RUNTIME DEFINITION - Single Source of Truth
+
+version: "3.9"
+
+services:
+  # Laravel Application (PHP-FPM + Nginx)
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gate1-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./backend:/var/www
+      - ./backend/storage/logs:/var/www/storage/logs
+    depends_on:
+      - db
+      - redis
+    networks:
+      - gate1
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8080:80"
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - DB_HOST=db
+      - REDIS_HOST=redis
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: gate1-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-gate1}
+      POSTGRES_USER: ${DB_USERNAME:-gate1}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - gate1-db:/var/lib/postgresql/data
+      - ./backend/database/init:/docker-entrypoint-initdb.d
+    networks:
+      - gate1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-gate1} -d ${DB_DATABASE:-gate1}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: gate1-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - gate1-redis:/data
+    networks:
+      - gate1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Queue Worker (Laravel Horizon alternative)
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gate1-worker
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    volumes:
+      - ./backend:/var/www
+    depends_on:
+      - db
+      - redis
+    networks:
+      - gate1
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - DB_HOST=db
+      - REDIS_HOST=redis
+
+  # Scheduler (Laravel Task Scheduling)
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gate1-scheduler
+    restart: unless-stopped
+    working_dir: /var/www
+    command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction & sleep 60; done"
+    volumes:
+      - ./backend:/var/www
+    depends_on:
+      - db
+      - redis
+    networks:
+      - gate1
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - DB_HOST=db
+      - REDIS_HOST=redis
+
+networks:
+  gate1:
+    driver: bridge
+
+volumes:
+  gate1-db:
+    driver: local
+  gate1-redis:
+    driver: local

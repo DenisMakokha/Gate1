@@ -1,4 +1,5 @@
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const { app } = require('electron');
 
@@ -8,6 +9,8 @@ class LoggerService {
         this.currentLogFile = null;
         this.maxLogFiles = 7; // Keep 7 days of logs
         this.maxLogSize = 10 * 1024 * 1024; // 10MB per file
+        this.writeQueue = []; // Buffer for async writes
+        this.isWriting = false;
         
         this.ensureLogDirectory();
         this.rotateLogFile();
@@ -79,7 +82,7 @@ class LoggerService {
 
         const logLine = this.formatMessage(level, message, data);
         
-        // Console output
+        // Console output (sync is fine for console)
         switch (level) {
             case 'error':
                 console.error(logLine);
@@ -91,18 +94,36 @@ class LoggerService {
                 console.log(logLine);
         }
 
-        // File output
+        // Queue for async file output
+        this.writeQueue.push(logLine);
+        this.processWriteQueue();
+    }
+
+    async processWriteQueue() {
+        if (this.isWriting || this.writeQueue.length === 0) return;
+        
+        this.isWriting = true;
+        
         try {
-            fs.appendFileSync(this.currentLogFile, logLine + '\n');
+            // Batch write all queued lines
+            const lines = this.writeQueue.splice(0, this.writeQueue.length);
+            await fsPromises.appendFile(this.currentLogFile, lines.join('\n') + '\n');
             
             // Check file size and rotate if needed
-            const stats = fs.statSync(this.currentLogFile);
+            const stats = await fsPromises.stat(this.currentLogFile);
             if (stats.size > this.maxLogSize) {
                 const newName = this.currentLogFile.replace('.log', `-${Date.now()}.log`);
-                fs.renameSync(this.currentLogFile, newName);
+                await fsPromises.rename(this.currentLogFile, newName);
             }
         } catch (e) {
             console.error('Failed to write to log file:', e);
+        } finally {
+            this.isWriting = false;
+            
+            // Process any new items that came in while writing
+            if (this.writeQueue.length > 0) {
+                this.processWriteQueue();
+            }
         }
     }
 

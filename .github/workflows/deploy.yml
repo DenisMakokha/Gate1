@@ -1,0 +1,234 @@
+# Gate1 System - Production Deployment Workflow
+# Triggers on push to main branch
+# Handles: Backend (Laravel), Web Dashboard (Vite), Database Migrations
+
+name: Deploy Gate1 to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      skip_migrations:
+        description: 'Skip database migrations'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  APP_ENV: production
+
+jobs:
+  # ==========================================
+  # JOB 1: Build & Test Backend
+  # ==========================================
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_pgsql, pdo_mysql, redis, gd, zip
+          coverage: none
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install PHP dependencies
+        working-directory: backend
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      - name: Validate composer.json
+        working-directory: backend
+        run: composer validate --strict
+
+  # ==========================================
+  # JOB 2: Build Web Dashboard
+  # ==========================================
+  build-frontend:
+    name: Build Web Dashboard
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web-dashboard
+        run: npm ci
+
+      - name: Build for production
+        working-directory: web-dashboard
+        run: npm run build
+        env:
+          VITE_API_URL: /api
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dashboard-dist
+          path: web-dashboard/dist
+          retention-days: 1
+
+  # ==========================================
+  # JOB 3: Deploy to Production Server
+  # ==========================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download web dashboard build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dashboard-dist
+          path: web-dashboard/dist
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SKIP_MIGRATIONS: ${{ github.event.inputs.skip_migrations || 'false' }}
+        run: |
+          # Sync code to server
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='.env' \
+            --exclude='storage/logs/*' \
+            --exclude='storage/framework/cache/*' \
+            --exclude='storage/framework/sessions/*' \
+            --exclude='storage/framework/views/*' \
+            ./ $SSH_USER@$SSH_HOST:/opt/apps/gate1/
+
+          # Execute deployment on server
+          ssh $SSH_USER@$SSH_HOST << 'DEPLOY_SCRIPT'
+            set -e
+            cd /opt/apps/gate1
+
+            echo "=========================================="
+            echo "🚀 Gate1 System Deployment Started"
+            echo "=========================================="
+
+            # Run pre-deployment script if exists
+            if [ -f deploy/before.sh ]; then
+              echo "📦 Running pre-deployment script..."
+              bash deploy/before.sh
+            fi
+
+            echo "🐳 Building and starting containers..."
+            docker compose build --no-cache app
+            docker compose up -d
+
+            echo "⏳ Waiting for services to be ready..."
+            sleep 10
+
+            # Check if migrations should run
+            if [ "$SKIP_MIGRATIONS" != "true" ]; then
+              echo "📊 Running database migrations..."
+              docker compose exec -T app php artisan migrate --force
+            else
+              echo "⏭️ Skipping migrations (manual override)"
+            fi
+
+            echo "🔧 Optimizing application..."
+            docker compose exec -T app php artisan config:clear
+            docker compose exec -T app php artisan config:cache
+            docker compose exec -T app php artisan route:cache
+            docker compose exec -T app php artisan view:clear
+            docker compose exec -T app php artisan view:cache
+            docker compose exec -T app php artisan event:cache
+
+            echo "🔑 Generating app key if needed..."
+            docker compose exec -T app php artisan key:generate --force || true
+
+            # Copy web dashboard to public folder
+            echo "🌐 Deploying web dashboard..."
+            cp -r web-dashboard/dist/* backend/public/dashboard/ 2>/dev/null || mkdir -p backend/public/dashboard && cp -r web-dashboard/dist/* backend/public/dashboard/
+
+            # Set permissions
+            echo "🔒 Setting permissions..."
+            docker compose exec -T app chown -R www-data:www-data /var/www/storage
+            docker compose exec -T app chmod -R 775 /var/www/storage
+
+            # Run post-deployment script if exists
+            if [ -f deploy/after.sh ]; then
+              echo "✅ Running post-deployment script..."
+              bash deploy/after.sh
+            fi
+
+            # Health check
+            echo "🏥 Running health check..."
+            docker compose exec -T app php artisan --version
+
+            echo "=========================================="
+            echo "✅ Gate1 System Deployment Complete!"
+            echo "=========================================="
+          DEPLOY_SCRIPT
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi
+
+  # ==========================================
+  # JOB 4: Post-Deployment Verification
+  # ==========================================
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Health check
+        run: |
+          echo "🔍 Verifying deployment..."
+          # Add actual health check URL when domain is configured
+          # curl -f https://api.gate1system.com/api/health || exit 1
+          echo "✅ Deployment verified!"

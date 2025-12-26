@@ -154,7 +154,8 @@ export default function LoginScreen() {
             {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>Gate 1 System v1.0.0</Text>
-              <Text style={styles.footerSubtext}>© 2024 All rights reserved</Text>
+              <Text style={styles.footerSubtext}>Powered by Nelium Systems</Text>
+              <Text style={styles.footerSubtext}>© 2025 All rights reserved</Text>
             </View>
           </View>
         </SafeAreaView>

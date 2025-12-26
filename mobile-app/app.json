@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.gate1system.mobile"
+      "bundleIdentifier": "cloud.gate1.mobile"
     },
     "android": {
       "adaptiveIcon": {

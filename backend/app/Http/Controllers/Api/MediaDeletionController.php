@@ -90,6 +90,7 @@ class MediaDeletionController extends Controller
 
     /**
      * Get pending deletion tasks for a device (used by desktop agent)
+     * Only returns tasks for CLOSED events (event has ended)
      */
     public function getPendingTasks(Request $request): JsonResponse
     {
@@ -97,10 +98,17 @@ class MediaDeletionController extends Controller
             'device_id' => 'required|string',
         ]);
 
+        // Only get tasks for events that are CLOSED (end_date has passed)
         $tasks = MediaDeletionTask::where('device_id', $request->device_id)
             ->where('status', 'pending')
-            ->where('scheduled_at', '<=', now())
-            ->with(['event:id,name', 'media:id,filename,file_path'])
+            ->whereHas('event', function ($query) {
+                $query->where('status', 'closed')
+                    ->orWhere(function ($q) {
+                        $q->whereNotNull('end_date')
+                          ->where('end_date', '<', now());
+                    });
+            })
+            ->with(['event:id,name,end_date', 'media:id,filename,file_path,file_size,checksum'])
             ->get();
 
         return response()->json([
@@ -110,7 +118,9 @@ class MediaDeletionController extends Controller
                 'event_name' => $task->event?->name,
                 'media_id' => $task->media_id,
                 'file_path' => $task->file_path,
-                'filename' => $task->media?->filename,
+                'filename' => $task->filename ?? $task->media?->filename,
+                'file_size' => $task->file_size ?? $task->media?->file_size,
+                'checksum' => $task->checksum ?? $task->media?->checksum,
                 'scheduled_at' => $task->scheduled_at->toDateTimeString(),
             ]),
             'count' => $tasks->count(),

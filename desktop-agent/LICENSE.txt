@@ -1,7 +1,8 @@
 Gate 1 System - Desktop Agent
 End User License Agreement
 
-Copyright (c) 2024 Gate 1 System. All Rights Reserved.
+Copyright © 2025 Gate 1 System. All Rights Reserved.
+Powered by Nelium Systems
 
 This software is proprietary and confidential. Unauthorized copying, 
 distribution, modification, or use of this software, via any medium, 
@@ -21,4 +22,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
-For support, contact: support@gate1system.org
+For support, contact: support@neliumsystems.com
+
+---
+Developed and maintained by Nelium Systems
+https://neliumsystems.com

@@ -62,3 +62,22 @@ coverage/
 # Misc
 *.tmp
 *.temp
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Deployment
+deploy/deployment.log
+*.backup.*
+.env.backup.*
+
+# Database dumps
+*.dump
+# Allow init scripts
+!backend/database/init/*.sql
+
+# SSL certificates
+*.pem
+*.crt
+!docker/nginx/*.conf

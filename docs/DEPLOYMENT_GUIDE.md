@@ -81,7 +81,7 @@ php artisan view:cache
 ```nginx
 server {
     listen 80;
-    server_name api.gate1system.org;
+    server_name api.gate1.cloud;
     root /var/www/gate1system/backend/public;
 
     index index.php;
@@ -118,7 +118,7 @@ Upload contents of `dist/` folder to:
 ### Step 3: Configure API URL
 In production, update `src/services/api.js`:
 ```javascript
-const API_BASE_URL = 'https://api.gate1system.org/api';
+const API_BASE_URL = 'https://api.gate1.cloud/api';
 ```
 
 ---
@@ -128,7 +128,7 @@ const API_BASE_URL = 'https://api.gate1system.org/api';
 ### Step 1: Configure API
 Edit `src/main.js`:
 ```javascript
-const API_BASE_URL = 'https://api.gate1system.org/api';
+const API_BASE_URL = 'https://api.gate1.cloud/api';
 ```
 
 ### Step 2: Build for Windows
@@ -229,7 +229,7 @@ php artisan tinker
 ```php
 $user = \App\Models\User::create([
     'name' => 'Admin User',
-    'email' => 'admin@gate1system.org',
+    'email' => 'admin@gate1.cloud',
     'password' => bcrypt('secure-password'),
 ]);
 

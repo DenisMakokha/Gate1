@@ -189,7 +189,7 @@ export default function Settings() {
                     value={generalSettings.app_url}
                     onChange={(e) => setGeneralSettings({ ...generalSettings, app_url: e.target.value })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="https://gate1system.org"
+                    placeholder="https://gate1.cloud"
                   />
                 </div>
               </div>

@@ -100,7 +100,7 @@ php artisan tinker
 ```php
 $user = \App\Models\User::create([
     'name' => 'Admin User',
-    'email' => 'admin@gate1system.org',
+    'email' => 'admin@gate1.cloud',
     'password' => bcrypt('password123'),
 ]);
 $role = \App\Models\Role::where('slug', 'admin')->first();
@@ -113,7 +113,7 @@ exit
 ## 6. Login
 
 - **Web Dashboard**: http://localhost:3000
-- **Email**: admin@gate1system.org
+- **Email**: admin@gate1.cloud
 - **Password**: password123
 
 ---

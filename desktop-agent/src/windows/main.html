@@ -1076,6 +1076,551 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+
+        /* ========== NON-OBSTRUCTIVE NOTIFICATION SYSTEM ========== */
+        
+        /* Toast Notifications - Slide in from right */
+        .toast-container {
+            position: fixed;
+            top: 50px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+            max-width: 280px;
+        }
+
+        .toast {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            box-shadow: var(--shadow);
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast.hiding {
+            transform: translateX(120%);
+            opacity: 0;
+        }
+
+        .toast-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .toast-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .toast-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .toast-message {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .toast-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.warning { border-left: 3px solid var(--warning); }
+        .toast.error { border-left: 3px solid var(--danger); }
+        .toast.info { border-left: 3px solid var(--primary); }
+
+        /* Mini Status Widget - Bottom left, always visible */
+        .mini-status {
+            position: fixed;
+            bottom: 80px;
+            left: 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow);
+            z-index: 500;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            max-width: 200px;
+        }
+
+        .mini-status:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow), var(--shadow-glow);
+        }
+
+        .mini-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            flex-shrink: 0;
+        }
+
+        .mini-status-dot.offline { background: var(--danger); }
+        .mini-status-dot.syncing { 
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        .mini-status-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mini-status-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .mini-status-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Expanded Status Panel */
+        .status-panel {
+            position: fixed;
+            bottom: 130px;
+            left: 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            box-shadow: var(--shadow);
+            z-index: 499;
+            width: 220px;
+            opacity: 0;
+            transform: translateY(10px) scale(0.95);
+            pointer-events: none;
+            transition: all var(--transition-normal);
+        }
+
+        .status-panel.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        .status-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .status-panel-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-panel-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+        }
+
+        .status-panel-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .status-panel-value {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .status-panel-value.success { color: var(--success); }
+        .status-panel-value.warning { color: var(--warning); }
+        .status-panel-value.danger { color: var(--danger); }
+
+        /* Quick Actions in Status Panel */
+        .quick-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .quick-action-btn {
+            flex: 1;
+            padding: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-align: center;
+        }
+
+        .quick-action-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        /* Improved Mascot - More subtle, expandable */
+        .mascot-container {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            z-index: 600;
+        }
+
+        .mascot {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        .mascot:hover {
+            transform: scale(1.1);
+            border-color: var(--primary);
+            box-shadow: var(--shadow), 0 0 20px var(--primary-glow);
+        }
+
+        .mascot-face {
+            font-size: 24px;
+        }
+
+        .mascot-indicator {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--success);
+            border: 2px solid var(--bg-elevated);
+        }
+
+        .mascot-indicator.offline { background: var(--danger); }
+        .mascot-indicator.syncing { 
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        /* Mascot Bubble - Improved positioning */
+        .mascot-bubble {
+            position: absolute;
+            bottom: 60px;
+            right: 0;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 12px 16px;
+            max-width: 220px;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(10px) scale(0.9);
+            pointer-events: none;
+            transition: all var(--transition-normal);
+        }
+
+        .mascot-bubble.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        .mascot-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            right: 18px;
+            width: 16px;
+            height: 16px;
+            background: var(--bg-elevated);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            transform: rotate(45deg);
+        }
+
+        .mascot-bubble-text {
+            font-size: 13px;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        /* Activity indicator badge on mascot */
+        .mascot-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: var(--danger);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            border: 2px solid var(--bg-elevated);
+        }
+
+        .mascot-badge.hidden { display: none; }
+
+        /* ========== PERSISTENT SD SESSION BANNER ========== */
+        .sd-session-banner {
+            position: fixed;
+            top: 40px;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            padding: 10px 16px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 900;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .sd-session-banner.active {
+            display: flex;
+        }
+
+        .sd-session-banner.warning {
+            background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
+        }
+
+        .sd-session-banner.danger {
+            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
+        }
+
+        .sd-session-banner.success {
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+        }
+
+        .sd-banner-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .sd-banner-icon {
+            width: 36px;
+            height: 36px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .sd-banner-info h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .sd-banner-info p {
+            font-size: 11px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .sd-banner-stats {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .sd-banner-stat {
+            text-align: center;
+        }
+
+        .sd-banner-stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .sd-banner-stat-label {
+            font-size: 9px;
+            color: rgba(255,255,255,0.7);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sd-banner-progress {
+            width: 100px;
+            height: 6px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .sd-banner-progress-fill {
+            height: 100%;
+            background: white;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        /* Adjust app container when banner is visible */
+        .app-container.has-banner {
+            height: calc(100vh - 36px - 56px);
+            margin-top: 56px;
+        }
+
+        /* ========== WRONG DESTINATION WARNING ========== */
+        .wrong-dest-paths {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 16px 0;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .wrong-dest-path-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            background: var(--bg-card-hover);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .wrong-dest-path-item:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        .wrong-dest-path-item:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ========== BACKUP MODE INDICATOR ========== */
+        .backup-mode-indicator {
+            position: fixed;
+            top: 40px;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            padding: 8px 16px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            z-index: 899;
+            font-size: 12px;
+            color: white;
+            font-weight: 500;
+        }
+
+        .backup-mode-indicator.active {
+            display: flex;
+        }
+
+        .backup-mode-indicator .backup-icon {
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Powered by Nelium Systems Branding */
+        .powered-by {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .powered-by strong {
+            color: var(--primary-light);
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        .footer-branding {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 8px 16px;
+            background: var(--bg-darker);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            color: var(--text-muted);
+            z-index: 100;
+        }
+
+        .footer-branding strong {
+            color: var(--primary-light);
+            margin-left: 4px;
+        }
+
+        .footer-branding .version {
+            position: absolute;
+            right: 16px;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
@@ -1115,6 +1660,22 @@
                         <span>→</span>
                     </button>
                 </form>
+                <div style="margin-top: 16px; text-align: center;">
+                    <button onclick="toggleServerConfig()" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; text-decoration: underline;">
+                        Server Settings
+                    </button>
+                </div>
+                <div id="serverConfigPanel" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-dark); border-radius: 8px;">
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" style="font-size: 11px;">API Server URL</label>
+                        <input type="text" id="loginApiUrl" class="form-input" placeholder="http://127.0.0.1:8000/api" style="font-size: 12px;">
+                    </div>
+                    <button onclick="saveServerUrl()" class="btn btn-secondary" style="width: 100%; padding: 8px; font-size: 12px;">Save Server URL</button>
+                </div>
+                <div class="powered-by">
+                    <span>Powered by</span>
+                    <strong>Nelium Systems</strong>
+                </div>
             </div>
         </div>
 
@@ -1132,18 +1693,64 @@
                         <input type="text" id="editorName" class="form-input" placeholder="John Doe" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Group Code</label>
-                        <input type="text" id="groupCode" class="form-input" placeholder="e.g., G-07">
-                    </div>
-                    <div id="groupInfo" class="hidden" style="background: var(--success-light); padding: 12px; border-radius: 10px; margin-bottom: 20px;">
-                        <div style="color: var(--success); font-weight: 600; font-size: 13px;">✓ Group Found</div>
-                        <div id="groupLeaderName" style="font-size: 12px; color: var(--text-muted);"></div>
+                        <label class="form-label">Select Your Group</label>
+                        <select id="groupCode" class="form-input" required>
+                            <option value="">Loading groups...</option>
+                        </select>
                     </div>
                     <button type="submit" class="btn btn-primary">
                         <span>Complete Setup</span>
                         <span>→</span>
                     </button>
                 </form>
+                <div class="powered-by">
+                    <span>Powered by</span>
+                    <strong>Nelium Systems</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification Container -->
+        <div id="toastContainer" class="toast-container"></div>
+
+        <!-- Mini Status Widget (Bottom Left) -->
+        <div id="miniStatus" class="mini-status" onclick="toggleStatusPanel()" style="display: none;">
+            <div id="miniStatusDot" class="mini-status-dot"></div>
+            <div class="mini-status-info">
+                <div class="mini-status-label">Status</div>
+                <div id="miniStatusValue" class="mini-status-value">Connected</div>
+            </div>
+        </div>
+
+        <!-- Expanded Status Panel -->
+        <div id="statusPanel" class="status-panel">
+            <div class="status-panel-header">
+                <span class="status-panel-title">System Overview</span>
+                <span id="statusPanelTime" style="font-size: 10px; color: var(--text-muted);"></span>
+            </div>
+            <div class="status-panel-row">
+                <span class="status-panel-label">Connection</span>
+                <span id="panelConnection" class="status-panel-value success">Online</span>
+            </div>
+            <div class="status-panel-row">
+                <span class="status-panel-label">Latency</span>
+                <span id="panelLatency" class="status-panel-value">--</span>
+            </div>
+            <div class="status-panel-row">
+                <span class="status-panel-label">Files Synced</span>
+                <span id="panelFilesSynced" class="status-panel-value">0</span>
+            </div>
+            <div class="status-panel-row">
+                <span class="status-panel-label">Active Sessions</span>
+                <span id="panelSessions" class="status-panel-value">0</span>
+            </div>
+            <div class="status-panel-row">
+                <span class="status-panel-label">Pending Sync</span>
+                <span id="panelPending" class="status-panel-value">0</span>
+            </div>
+            <div class="quick-actions">
+                <button class="quick-action-btn" onclick="syncNow()">🔄 Sync</button>
+                <button class="quick-action-btn" onclick="openSettings()">⚙️ Settings</button>
             </div>
         </div>
 
@@ -1246,6 +1853,43 @@
         </div>
     </div>
 
+    <!-- Persistent SD Session Banner -->
+    <div id="sdSessionBanner" class="sd-session-banner">
+        <div class="sd-banner-left">
+            <div class="sd-banner-icon">📷</div>
+            <div class="sd-banner-info">
+                <h4 id="bannerCameraName">Camera 1A</h4>
+                <p id="bannerSessionId">Session: --</p>
+            </div>
+        </div>
+        <div class="sd-banner-stats">
+            <div class="sd-banner-stat">
+                <div class="sd-banner-stat-value" id="bannerFilesTotal">0</div>
+                <div class="sd-banner-stat-label">Total</div>
+            </div>
+            <div class="sd-banner-stat">
+                <div class="sd-banner-stat-value" id="bannerFilesCopied">0</div>
+                <div class="sd-banner-stat-label">Copied</div>
+            </div>
+            <div class="sd-banner-stat">
+                <div class="sd-banner-stat-value" id="bannerFilesPending">0</div>
+                <div class="sd-banner-stat-label">Pending</div>
+            </div>
+            <div class="sd-banner-stat">
+                <div class="sd-banner-progress">
+                    <div id="bannerProgressFill" class="sd-banner-progress-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Mode Indicator -->
+    <div id="backupModeIndicator" class="backup-mode-indicator">
+        <span class="backup-icon">💾</span>
+        <span>BACKUP MODE ACTIVE</span>
+        <span id="backupDiskName">- External Drive</span>
+    </div>
+
     <!-- Mascot / Gigi Assistant -->
     <div class="mascot-container" id="mascotContainer">
         <div class="mascot-bubble" id="mascotBubble">
@@ -1311,6 +1955,67 @@
         </div>
     </div>
 
+    <!-- Wrong Destination Warning Modal -->
+    <div id="wrongDestModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon warning">📂</div>
+            <h3 class="modal-title">Unusual Destination Detected</h3>
+            <p class="modal-desc">
+                Files are being copied to <strong id="wrongDestPath">Desktop</strong>.<br>
+                This location may not be ideal for project files.
+            </p>
+            <div style="background: var(--warning-light); padding: 10px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--warning);">
+                <div style="font-size: 11px; color: var(--warning); font-weight: 600;">⚠️ Risk: Files may be accidentally deleted or hard to find</div>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Recommended folders:</div>
+                <div id="suggestedPaths" class="wrong-dest-paths"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="continueWrongDest()">Continue Anyway</button>
+                <button class="btn btn-primary" onclick="closeModal('wrongDestModal')">I'll Move Files</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Issue Warning Modal -->
+    <div id="audioIssueModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon warning">🔇</div>
+            <h3 class="modal-title">Audio Issue Detected</h3>
+            <p class="modal-desc" id="audioIssueDesc">This video file may have audio problems.</p>
+            <div id="audioIssueDetails" style="background: var(--bg-dark); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                <div style="font-size: 12px; color: var(--text-muted);">File: <span id="audioIssueFile"></span></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="ignoreAudioIssue()">Ignore</button>
+                <button class="btn btn-primary" onclick="reportAudioIssue()">Report Issue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Verification Modal -->
+    <div id="backupVerifyModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon info" id="backupVerifyIcon">💾</div>
+            <h3 class="modal-title" id="backupVerifyTitle">Backup Verification</h3>
+            <p class="modal-desc" id="backupVerifyDesc">Verifying backup integrity...</p>
+            <div id="backupVerifyProgress" style="margin: 20px 0;">
+                <div class="progress-bar" style="height: 8px;">
+                    <div id="backupProgressFill" class="progress-fill" style="width: 0%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-muted);">
+                    <span id="backupVerifyStatus">Checking...</span>
+                    <span id="backupVerifyPercent">0%</span>
+                </div>
+            </div>
+            <div id="backupVerifyResult" style="display: none; padding: 12px; border-radius: 8px; margin-bottom: 16px;"></div>
+            <div class="modal-buttons" id="backupVerifyButtons" style="display: none;">
+                <button class="btn btn-primary" onclick="closeModal('backupVerifyModal')">Done</button>
+            </div>
+        </div>
+    </div>
+
     <!-- File Deletion Warning Modal (CRITICAL) -->
     <div id="fileDeletionModal" class="modal-overlay">
         <div class="modal" style="border: 2px solid var(--danger);">
@@ -1351,7 +2056,7 @@
                     <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server Configuration</h4>
                     <div class="form-group">
                         <label class="form-label">API Server URL</label>
-                        <input type="text" id="settingsApiUrl" class="form-input" placeholder="http://localhost:8000/api">
+                        <input type="text" id="settingsApiUrl" class="form-input" placeholder="http://127.0.0.1:8000/api">
                     </div>
                 </div>
 
@@ -1421,11 +2126,40 @@
                     </label>
                 </div>
 
+                <!-- Danger Zone -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 13px; color: var(--danger); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Danger Zone</h4>
+                    <button onclick="forgetDevice()" style="width: 100%; padding: 12px; background: var(--danger-light); border: 1px solid var(--danger); border-radius: 8px; color: var(--danger); cursor: pointer; font-size: 13px; font-weight: 500;">
+                        🗑️ Forget This Device
+                    </button>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px; text-align: center;">
+                        This will clear all local data and require re-registration
+                    </div>
+                </div>
+
+                <!-- Support -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Support</h4>
+                    <button onclick="exportDiagnostics()" style="width: 100%; padding: 12px; background: var(--bg-card-hover); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); cursor: pointer; font-size: 13px;">
+                        📋 Export Diagnostics
+                    </button>
+                    <button onclick="ipcRenderer.invoke('open-logs-folder')" style="width: 100%; padding: 12px; margin-top: 8px; background: var(--bg-card-hover); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); cursor: pointer; font-size: 13px;">
+                        📁 Open Logs Folder
+                    </button>
+                </div>
+
                 <!-- About -->
                 <div style="text-align: center; padding: 16px; background: var(--bg-card-hover); border-radius: 8px;">
                     <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Gate 1 Agent</div>
                     <div style="font-size: 12px; color: var(--text-muted);">Version 1.0.0</div>
-                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">© 2024 Gate 1 System</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">© 2025 Gate 1 System</div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">
+                        Shortcuts: Ctrl+Shift+S (Sync) | Ctrl+Shift+L (Logs) | Ctrl+Shift+D (Diagnostics)
+                    </div>
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <span style="font-size: 11px; color: var(--text-muted);">Powered by</span>
+                        <strong style="color: var(--primary-light); font-size: 11px; margin-left: 4px;">Nelium Systems</strong>
+                    </div>
                 </div>
             </div>
 
@@ -1445,13 +2179,148 @@
         let mascotBubbleTimeout = null;
         let mascotIdleTimeout = null;
         let lastActivityTime = Date.now();
+        let latencyInterval = null;
+        let statusPanelVisible = false;
+        let toastQueue = [];
+        let issueCount = 0;
+
+        // ========== TOAST NOTIFICATION SYSTEM ==========
+        
+        function showToast(title, message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = {
+                success: '✓',
+                warning: '⚠',
+                error: '✕',
+                info: 'ℹ'
+            };
+            
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                    <div class="toast-time">${time}</div>
+                </div>
+            `;
+            
+            toast.onclick = () => dismissToast(toast);
+            container.appendChild(toast);
+            
+            // Trigger animation
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+            
+            // Auto dismiss
+            setTimeout(() => dismissToast(toast), duration);
+            
+            // Limit to 3 toasts
+            while (container.children.length > 3) {
+                dismissToast(container.firstChild);
+            }
+        }
+
+        function dismissToast(toast) {
+            if (!toast || !toast.parentNode) return;
+            toast.classList.remove('show');
+            toast.classList.add('hiding');
+            setTimeout(() => toast.remove(), 300);
+        }
+
+        // ========== MINI STATUS WIDGET ==========
+        
+        function toggleStatusPanel() {
+            const panel = document.getElementById('statusPanel');
+            statusPanelVisible = !statusPanelVisible;
+            
+            if (statusPanelVisible) {
+                updateStatusPanel();
+                panel.classList.add('visible');
+            } else {
+                panel.classList.remove('visible');
+            }
+        }
+
+        async function updateStatusPanel() {
+            try {
+                // Update time
+                document.getElementById('statusPanelTime').textContent = 
+                    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                // Get sync status
+                const syncStatus = await ipcRenderer.invoke('get-sync-status');
+                document.getElementById('panelPending').textContent = syncStatus.pendingCount;
+                document.getElementById('panelPending').className = 
+                    'status-panel-value ' + (syncStatus.pendingCount > 0 ? 'warning' : '');
+                
+                // Get sessions
+                const sessions = await ipcRenderer.invoke('get-active-sessions');
+                document.getElementById('panelSessions').textContent = sessions?.length || 0;
+                
+                // Files synced
+                document.getElementById('panelFilesSynced').textContent = 
+                    document.getElementById('filesSynced')?.textContent || '0';
+                
+                // Connection & latency
+                const ping = await ipcRenderer.invoke('ping-server');
+                if (ping.online) {
+                    document.getElementById('panelConnection').textContent = 'Online';
+                    document.getElementById('panelConnection').className = 'status-panel-value success';
+                    document.getElementById('panelLatency').textContent = ping.latency + 'ms';
+                    document.getElementById('panelLatency').className = 
+                        'status-panel-value ' + (ping.latency < 100 ? 'success' : ping.latency < 300 ? 'warning' : 'danger');
+                } else {
+                    document.getElementById('panelConnection').textContent = 'Offline';
+                    document.getElementById('panelConnection').className = 'status-panel-value danger';
+                    document.getElementById('panelLatency').textContent = '--';
+                }
+            } catch (e) {
+                console.error('Failed to update status panel:', e);
+            }
+        }
+
+        function updateMiniStatus(online, text) {
+            const dot = document.getElementById('miniStatusDot');
+            const value = document.getElementById('miniStatusValue');
+            
+            dot.className = 'mini-status-dot' + (online ? '' : ' offline');
+            value.textContent = text || (online ? 'Connected' : 'Offline');
+        }
+
+        // Show mini status when on dashboard
+        function showMiniStatus() {
+            document.getElementById('miniStatus').style.display = 'flex';
+        }
+
+        function hideMiniStatus() {
+            document.getElementById('miniStatus').style.display = 'none';
+            document.getElementById('statusPanel').classList.remove('visible');
+            statusPanelVisible = false;
+        }
+
+        // Close status panel when clicking outside
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('statusPanel');
+            const widget = document.getElementById('miniStatus');
+            if (statusPanelVisible && !panel.contains(e.target) && !widget.contains(e.target)) {
+                panel.classList.remove('visible');
+                statusPanelVisible = false;
+            }
+        });
 
         // Mascot Messages Database
         const mascotMessages = {
             // Greetings
             greeting: [
-                "Hello! I'm Gigi, your assistant 👋",
-                "Hey there! Ready to work? 😊",
+                "Hello! I'm Gigi, your assistant ",
+                "Hey there! Ready to work? ",
+                "Good to see you! Let's do this ",
                 "Good to see you! Let's do this 💪",
             ],
             // SD Card Events
@@ -1553,6 +2422,45 @@
                 "Backup verification failed 😰",
                 "Checksum mismatch - might need re-backup",
                 "Uh oh! Backup doesn't match original",
+            ],
+            backupDiskInserted: [
+                "Backup drive detected! 💾",
+                "Backup disk connected - ready to secure files",
+                "External backup ready! 🔒",
+            ],
+            backupDiskRemoved: [
+                "Backup drive disconnected 📤",
+                "Backup disk removed safely ✓",
+                "External backup detached",
+            ],
+            // Wrong Destination Warning
+            wrongDestination: [
+                "⚠️ This folder isn't recommended for media files!",
+                "Hold on! That's not a work folder 🤔",
+                "Hmm, Desktop/Downloads isn't ideal for video files",
+                "Consider moving this to a proper workspace folder 📁",
+            ],
+            // Audio Issues
+            audioIssue: [
+                "🔇 Audio issue detected on this file!",
+                "Hmm, something's off with the audio...",
+                "This video might have audio problems ⚠️",
+            ],
+            noAudio: [
+                "⚠️ No audio track found in this video!",
+                "This file has no audio - camera issue? 🎤",
+                "Silent video detected - check recording 🔇",
+            ],
+            // Data Protection
+            autoDeleteScheduled: [
+                "File tracked for auto-cleanup after event 🔒",
+                "Data protection active - file will be secured",
+                "Registered for post-event cleanup ✓",
+            ],
+            filesAutoDeleted: [
+                "Data protection: {count} files auto-deleted 🔒",
+                "Post-event cleanup complete - {count} files removed",
+                "Sensitive data cleared per policy ✓",
             ],
             // Connection Events
             online: [
@@ -1807,9 +2715,33 @@
                     loadDashboard();
                 } else {
                     showView('registrationView');
+                    loadGroups(); // Load groups for dropdown
                 }
             } catch (error) {
                 alert('Login failed: ' + (error.message || 'Invalid credentials'));
+            }
+        }
+
+        async function loadGroups() {
+            try {
+                const groups = await ipcRenderer.invoke('get-groups');
+                const select = document.getElementById('groupCode');
+                select.innerHTML = '<option value="">-- Select a Group --</option>';
+                
+                if (groups && groups.length > 0) {
+                    groups.forEach(group => {
+                        const option = document.createElement('option');
+                        option.value = group.group_code;
+                        option.textContent = `${group.name} (${group.group_code})`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No groups available</option>';
+                }
+            } catch (error) {
+                console.error('Failed to load groups:', error);
+                const select = document.getElementById('groupCode');
+                select.innerHTML = '<option value="">Failed to load groups</option>';
             }
         }
 
@@ -1844,17 +2776,50 @@
                 document.getElementById('editorNameDisplay').textContent = user?.name || 'Editor';
                 document.getElementById('deviceIdDisplay').textContent = deviceId || 'Not registered';
 
-                // Simulate latency
-                document.getElementById('latencyValue').textContent = Math.floor(Math.random() * 50 + 20) + 'ms';
+                // Get real latency from server ping
+                updateLatency();
+                // Refresh latency every 30 seconds (clear previous interval first)
+                if (latencyInterval) clearInterval(latencyInterval);
+                latencyInterval = setInterval(updateLatency, 30000);
 
                 // Load sessions
                 const sessions = await ipcRenderer.invoke('get-active-sessions');
                 updateSessionsList(sessions || []);
 
+                // Show mini status widget
+                showMiniStatus();
+                
                 // Initialize mascot
                 initMascot();
+                
+                // Show welcome toast
+                showToast('Ready', 'Monitoring your folders', 'success', 3000);
             } catch (e) {
                 console.error('Failed to load dashboard:', e);
+            }
+        }
+
+        async function updateLatency() {
+            try {
+                const result = await ipcRenderer.invoke('ping-server');
+                const latencyEl = document.getElementById('latencyValue');
+                const statusIndicator = document.getElementById('statusIndicator');
+                const statusInfo = document.querySelector('.status-info h3');
+                
+                if (result.online && result.latency !== null) {
+                    latencyEl.textContent = result.latency + 'ms';
+                    latencyEl.style.color = result.latency < 100 ? 'var(--success)' : 
+                                            result.latency < 300 ? 'var(--warning)' : 'var(--danger)';
+                    statusIndicator.className = 'status-indicator online';
+                    if (statusInfo) statusInfo.textContent = 'Connected';
+                } else {
+                    latencyEl.textContent = '--';
+                    latencyEl.style.color = 'var(--danger)';
+                    statusIndicator.className = 'status-indicator offline';
+                    if (statusInfo) statusInfo.textContent = 'Offline';
+                }
+            } catch (e) {
+                document.getElementById('latencyValue').textContent = '--';
             }
         }
 
@@ -1914,36 +2879,43 @@
             document.getElementById('issuesCount').textContent = issues;
         }
 
-        // IPC Event Handlers
+        // IPC Event Handlers - Using toast notifications for non-obstructive updates
         ipcRenderer.on('sd-inserted', (event, sdInfo) => {
             addActivity(`SD card detected: ${sdInfo.fileCount} files`, 'info');
+            showToast('SD Card Detected', `Found ${sdInfo.fileCount} video files`, 'info');
             showMascotMessage('sdInserted', {}, 'excited', 4000);
             updateMascotIndicator('syncing');
+            updateMiniStatus(true, 'Scanning...');
         });
 
         ipcRenderer.on('sd-new', (event, sdInfo) => {
             currentSdInfo = sdInfo;
             document.getElementById('sdBindModal').classList.add('active');
+            showToast('New SD Card', 'Please register this card', 'info', 6000);
             showMascotMessage('sdNew', {}, 'thinking', 5000);
         });
 
         ipcRenderer.on('sd-recognized', (event, sdCard) => {
             addActivity(`Camera ${sdCard.camera_number}${sdCard.sd_label} connected`, 'success');
+            showToast('Camera Ready', `Camera ${sdCard.camera_number}${sdCard.sd_label || ''} connected`, 'success');
             showMascotMessage('sdRecognized', { camera: `${sdCard.camera_number}${sdCard.sd_label || ''}` }, 'success', 4000);
-            showMascotMessage('sessionStarted', {}, 'working', 4000);
             updateMascotIndicator('online');
+            updateMiniStatus(true, 'Active Session');
         });
 
         ipcRenderer.on('sd-early-removal', (event, data) => {
             currentSession = data.session;
             document.getElementById('pendingFilesCount').textContent = data.pendingFiles;
             document.getElementById('earlyRemovalModal').classList.add('active');
+            showToast('Warning!', `${data.pendingFiles} files not copied!`, 'error', 10000);
             showMascotMessage('sdEarlyRemoval', { count: data.pendingFiles }, 'error', 6000);
         });
 
         ipcRenderer.on('sd-safe-removal', (event, session) => {
             addActivity(`Camera ${session.cameraNumber}${session.sdLabel} safely removed`, 'success');
+            showToast('Safe Removal', `Camera ${session.cameraNumber}${session.sdLabel} done`, 'success');
             showMascotMessage('sdSafeRemoval', {}, 'success', 4000);
+            updateMiniStatus(true, 'Connected');
         });
 
         ipcRenderer.on('file-renamed', (event, data) => {
@@ -1994,17 +2966,24 @@
             });
         });
 
-        // Connection status events
+        // Connection status events - Non-obstructive with toast + mini status
         ipcRenderer.on('connection-online', () => {
             updateMascotIndicator('online');
-            showMascotMessage('online', {}, 'success', 3000);
+            updateMiniStatus(true, 'Connected');
+            showToast('Back Online', 'Connection restored', 'success', 3000);
             document.getElementById('statusIndicator').className = 'status-indicator online';
+            updateSyncStatus();
+            
+            // Update status panel if visible
+            if (statusPanelVisible) updateStatusPanel();
         });
 
         ipcRenderer.on('connection-offline', () => {
             updateMascotIndicator('offline');
-            showMascotMessage('offline', {}, 'warning', 4000);
+            updateMiniStatus(false, 'Offline');
+            showToast('Connection Lost', 'Working offline - will sync later', 'warning', 5000);
             document.getElementById('statusIndicator').className = 'status-indicator offline';
+            updateSyncStatus();
         });
 
         // Backup events
@@ -2038,17 +3017,41 @@
         // File deletion event (CRITICAL - not allowed!)
         ipcRenderer.on('file-deleted', (event, data) => {
             addActivity(`⛔ FILE DELETED: ${data.name}`, 'error');
-            showMascotMessage('fileDeleted', { filename: data.name }, 'error', 10000);
             
-            // Show deletion warning modal
+            // Show critical toast first
+            showToast('🚨 FILE DELETED!', data.name, 'error', 10000);
+            
+            // Then show modal for acknowledgment
             document.getElementById('deletedFileName').textContent = data.name;
             document.getElementById('deletedFilePath').textContent = data.folder;
             document.getElementById('fileDeletionModal').classList.add('active');
             
             // Update issues count
-            const issues = parseInt(document.getElementById('issuesCount').textContent) + 1;
-            document.getElementById('issuesCount').textContent = issues;
+            issueCount++;
+            document.getElementById('issuesCount').textContent = issueCount;
+            
+            // Update mascot with badge
+            updateMascotBadge(issueCount);
+            showMascotMessage('fileDeleted', { filename: data.name }, 'error', 10000);
         });
+
+        // Update mascot badge for issues
+        function updateMascotBadge(count) {
+            let badge = document.querySelector('.mascot-badge');
+            if (!badge) {
+                const mascot = document.getElementById('mascot');
+                badge = document.createElement('div');
+                badge.className = 'mascot-badge';
+                mascot.appendChild(badge);
+            }
+            
+            if (count > 0) {
+                badge.textContent = count > 9 ? '9+' : count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
 
         async function bindSdCard() {
             const cameraNumber = document.getElementById('cameraNumber').value;
@@ -2109,7 +3112,7 @@
             const config = await ipcRenderer.invoke('get-store', 'config') || {};
             watchedFolders = config.watchedFolders || [];
             
-            document.getElementById('settingsApiUrl').value = config.apiUrl || 'http://localhost:8000/api';
+            document.getElementById('settingsApiUrl').value = config.apiUrl || 'http://127.0.0.1:8000/api';
             document.getElementById('settingsAutoStart').checked = config.autoStart || false;
             document.getElementById('settingsMinimizeToTray').checked = config.minimizeToTray || false;
             document.getElementById('settingsNotifySync').checked = config.notifySync !== false;
@@ -2130,12 +3133,14 @@
                 return;
             }
             
-            list.innerHTML = watchedFolders.map((folder, index) => `
+            list.innerHTML = watchedFolders.map((folder, index) => {
+                const folderPath = typeof folder === 'object' ? folder.path : folder;
+                return `
                 <div style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-card-hover); border-radius: 8px; margin-bottom: 8px;">
-                    <span style="flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📁 ${folder}</span>
+                    <span style="flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📁 ${folderPath}</span>
                     <button onclick="removeWatchedFolder(${index})" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px;">✕</button>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         async function addWatchedFolder() {
@@ -2185,6 +3190,430 @@
         function closeWindow() {
             ipcRenderer.invoke('window-close');
         }
+
+        // Server URL configuration
+        function toggleServerConfig() {
+            const panel = document.getElementById('serverConfigPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            
+            // Load current URL
+            ipcRenderer.invoke('get-store', 'config').then(config => {
+                document.getElementById('loginApiUrl').value = config?.apiUrl || 'http://127.0.0.1:8000/api';
+            });
+        }
+
+        async function saveServerUrl() {
+            const newUrl = document.getElementById('loginApiUrl').value.trim();
+            if (!newUrl) {
+                alert('Please enter a valid server URL');
+                return;
+            }
+            
+            try {
+                await ipcRenderer.invoke('update-api-url', newUrl);
+                document.getElementById('serverConfigPanel').style.display = 'none';
+                addActivity('Server URL updated', 'success');
+            } catch (e) {
+                alert('Failed to save server URL');
+            }
+        }
+
+        // Token expiry handler
+        ipcRenderer.on('token-expired', () => {
+            addActivity('Session expired - please login again', 'warning');
+            showView('loginView');
+        });
+
+        // Sync complete handler
+        ipcRenderer.on('sync-complete', (event, result) => {
+            addActivity(`Synced ${result.processed} queued items`, 'success');
+            showMascotMessage('online', {}, 'success', 3000);
+        });
+
+        // Forget device function
+        async function forgetDevice() {
+            if (!confirm('Are you sure you want to forget this device? You will need to register again.')) {
+                return;
+            }
+            
+            try {
+                await ipcRenderer.invoke('forget-device');
+                closeModal('settingsModal');
+                showView('loginView');
+                addActivity('Device registration cleared', 'info');
+            } catch (e) {
+                alert('Failed to forget device');
+            }
+        }
+
+        // Export diagnostics
+        async function exportDiagnostics() {
+            try {
+                const result = await ipcRenderer.invoke('export-diagnostics');
+                if (result.success) {
+                    addActivity('Diagnostics exported to Desktop', 'success');
+                } else {
+                    alert('Failed to export: ' + result.error);
+                }
+            } catch (e) {
+                alert('Failed to export diagnostics');
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+Shift+S - Sync now
+            if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+                e.preventDefault();
+                syncNow();
+            }
+            // Ctrl+Shift+L - Open logs
+            if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+                e.preventDefault();
+                ipcRenderer.invoke('open-logs-folder');
+            }
+            // Ctrl+Shift+D - Export diagnostics
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                e.preventDefault();
+                exportDiagnostics();
+            }
+            // Escape - Close modals
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.active').forEach(m => {
+                    m.classList.remove('active');
+                });
+            }
+        });
+
+        // Pending sync indicator
+        async function updateSyncStatus() {
+            try {
+                const status = await ipcRenderer.invoke('get-sync-status');
+                const indicator = document.getElementById('pendingSyncIndicator');
+                if (indicator) {
+                    if (status.pendingCount > 0) {
+                        indicator.textContent = `${status.pendingCount} pending`;
+                        indicator.style.display = 'inline';
+                    } else {
+                        indicator.style.display = 'none';
+                    }
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        // Check sync status periodically
+        setInterval(updateSyncStatus, 30000);
+
+        // ========== PERSISTENT SD SESSION BANNER FUNCTIONS ==========
+        
+        let currentBannerSession = null;
+        let wrongDestWarningShown = new Set(); // Track which paths we've warned about
+        let currentAudioIssue = null;
+        
+        function showSessionBanner(session) {
+            currentBannerSession = session;
+            const banner = document.getElementById('sdSessionBanner');
+            const container = document.querySelector('.app-container');
+            
+            document.getElementById('bannerCameraName').textContent = 
+                `Camera ${session.cameraNumber}${session.sdLabel || ''}`;
+            document.getElementById('bannerSessionId').textContent = 
+                `Session: ${session.sessionId?.substring(0, 12) || '--'}...`;
+            
+            updateBannerStats(session);
+            
+            banner.classList.add('active');
+            container.classList.add('has-banner');
+        }
+        
+        function updateBannerStats(session) {
+            const total = session.filesDetected || 0;
+            const copied = session.filesCopied || 0;
+            const pending = session.filesPending || (total - copied);
+            const progress = total > 0 ? (copied / total) * 100 : 0;
+            
+            document.getElementById('bannerFilesTotal').textContent = total;
+            document.getElementById('bannerFilesCopied').textContent = copied;
+            document.getElementById('bannerFilesPending').textContent = pending;
+            document.getElementById('bannerProgressFill').style.width = `${progress}%`;
+            
+            // Update banner color based on progress
+            const banner = document.getElementById('sdSessionBanner');
+            banner.classList.remove('warning', 'danger', 'success');
+            
+            if (progress === 100) {
+                banner.classList.add('success');
+            } else if (progress < 25) {
+                banner.classList.add('danger');
+            } else if (progress < 75) {
+                banner.classList.add('warning');
+            }
+            // Default purple for 75-99%
+        }
+        
+        function hideSessionBanner() {
+            currentBannerSession = null;
+            const banner = document.getElementById('sdSessionBanner');
+            const container = document.querySelector('.app-container');
+            
+            banner.classList.remove('active', 'warning', 'danger', 'success');
+            container.classList.remove('has-banner');
+        }
+        
+        // ========== WRONG DESTINATION DETECTION ==========
+        
+        const UNSAFE_DESTINATIONS = [
+            'Desktop',
+            'Downloads',
+            'Temp',
+            'AppData',
+            'tmp',
+            'Recycle',
+            '$Recycle'
+        ];
+        
+        function isUnsafeDestination(filePath) {
+            const pathLower = filePath.toLowerCase();
+            return UNSAFE_DESTINATIONS.some(unsafe => pathLower.includes(unsafe.toLowerCase()));
+        }
+        
+        function showWrongDestWarning(destPath, suggestedPaths) {
+            // Only show once per destination
+            if (wrongDestWarningShown.has(destPath)) return;
+            wrongDestWarningShown.add(destPath);
+            
+            document.getElementById('wrongDestPath').textContent = destPath;
+            
+            const suggestionsEl = document.getElementById('suggestedPaths');
+            if (suggestedPaths && suggestedPaths.length > 0) {
+                suggestionsEl.innerHTML = suggestedPaths.map(p => `
+                    <div class="wrong-dest-path-item" onclick="selectSuggestedPath('${p.replace(/\\/g, '\\\\')}')">
+                        <span>📁</span>
+                        <span>${p}</span>
+                    </div>
+                `).join('');
+            } else {
+                suggestionsEl.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Configure watched folders in Settings</div>';
+            }
+            
+            document.getElementById('wrongDestModal').classList.add('active');
+            showMascotMessage('filenameIssue', { filename: 'wrong folder' }, 'warning', 5000);
+        }
+        
+        function continueWrongDest() {
+            closeModal('wrongDestModal');
+            addActivity('Continuing with non-standard destination (logged)', 'warning');
+            // Log the decision
+            ipcRenderer.invoke('log-wrong-dest-decision', {
+                decision: 'continue',
+                timestamp: new Date().toISOString()
+            }).catch(() => {});
+        }
+        
+        function selectSuggestedPath(path) {
+            closeModal('wrongDestModal');
+            addActivity(`Suggested path: ${path}`, 'info');
+        }
+        
+        // ========== AUDIO ISSUE HANDLING ==========
+        
+        function showAudioIssueModal(data) {
+            currentAudioIssue = data;
+            
+            let desc = 'This video file may have audio problems.';
+            if (data.issue === 'no_audio') {
+                desc = 'No audio track detected in this video file.';
+            } else if (data.issue === 'low_audio') {
+                desc = 'Audio levels appear very low in this file.';
+            } else if (data.issue === 'mono_audio') {
+                desc = 'Audio is mono - may indicate recording issue.';
+            }
+            
+            document.getElementById('audioIssueDesc').textContent = desc;
+            document.getElementById('audioIssueFile').textContent = data.filename;
+            document.getElementById('audioIssueModal').classList.add('active');
+            
+            showMascotMessage('filenameIssue', { filename: 'audio issue' }, 'warning', 4000);
+        }
+        
+        function ignoreAudioIssue() {
+            closeModal('audioIssueModal');
+            addActivity(`Audio issue ignored: ${currentAudioIssue?.filename}`, 'info');
+            ipcRenderer.invoke('log-audio-issue-decision', {
+                decision: 'ignore',
+                file: currentAudioIssue,
+                timestamp: new Date().toISOString()
+            }).catch(() => {});
+            currentAudioIssue = null;
+        }
+        
+        async function reportAudioIssue() {
+            closeModal('audioIssueModal');
+            try {
+                await ipcRenderer.invoke('report-issue', {
+                    type: 'audio_issue',
+                    subtype: currentAudioIssue?.issue,
+                    filename: currentAudioIssue?.filename,
+                    filepath: currentAudioIssue?.filepath,
+                    description: `Audio issue detected: ${currentAudioIssue?.issue}`
+                });
+                addActivity(`Audio issue reported: ${currentAudioIssue?.filename}`, 'success');
+                showMascotMessage('issueReported', {}, 'success', 3000);
+            } catch (e) {
+                addActivity('Failed to report audio issue', 'error');
+            }
+            currentAudioIssue = null;
+        }
+        
+        // ========== BACKUP MODE FUNCTIONS ==========
+        
+        let backupModeActive = false;
+        let currentBackupDisk = null;
+        
+        function showBackupMode(diskInfo) {
+            backupModeActive = true;
+            currentBackupDisk = diskInfo;
+            
+            document.getElementById('backupDiskName').textContent = `- ${diskInfo.name || 'Backup Drive'}`;
+            document.getElementById('backupModeIndicator').classList.add('active');
+            
+            showMascotMessage('backupStarted', {}, 'working', 4000);
+            addActivity(`Backup mode active: ${diskInfo.name}`, 'info');
+        }
+        
+        function hideBackupMode() {
+            backupModeActive = false;
+            currentBackupDisk = null;
+            document.getElementById('backupModeIndicator').classList.remove('active');
+        }
+        
+        function showBackupVerification(total, current, status) {
+            document.getElementById('backupVerifyModal').classList.add('active');
+            updateBackupProgress(total, current, status);
+        }
+        
+        function updateBackupProgress(total, current, status) {
+            const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+            document.getElementById('backupProgressFill').style.width = `${percent}%`;
+            document.getElementById('backupVerifyPercent').textContent = `${percent}%`;
+            document.getElementById('backupVerifyStatus').textContent = status || `Verifying ${current}/${total}...`;
+        }
+        
+        function showBackupResult(success, matched, failed) {
+            const resultEl = document.getElementById('backupVerifyResult');
+            const iconEl = document.getElementById('backupVerifyIcon');
+            const titleEl = document.getElementById('backupVerifyTitle');
+            const descEl = document.getElementById('backupVerifyDesc');
+            
+            document.getElementById('backupVerifyProgress').style.display = 'none';
+            resultEl.style.display = 'block';
+            document.getElementById('backupVerifyButtons').style.display = 'flex';
+            
+            if (success) {
+                iconEl.textContent = '✅';
+                titleEl.textContent = 'Backup Verified!';
+                descEl.textContent = `All ${matched} files match perfectly.`;
+                resultEl.style.background = 'var(--success-light)';
+                resultEl.style.borderColor = 'var(--success)';
+                resultEl.innerHTML = `<div style="color: var(--success); font-weight: 600;">✓ ${matched} files verified</div>`;
+                showMascotMessage('backupVerified', {}, 'success', 5000);
+            } else {
+                iconEl.textContent = '⚠️';
+                titleEl.textContent = 'Verification Issues';
+                descEl.textContent = `${failed} files need attention.`;
+                resultEl.style.background = 'var(--warning-light)';
+                resultEl.innerHTML = `
+                    <div style="color: var(--success);">✓ ${matched} files verified</div>
+                    <div style="color: var(--danger); margin-top: 4px;">✕ ${failed} files have issues</div>
+                `;
+                showMascotMessage('backupFailed', {}, 'error', 5000);
+            }
+        }
+        
+        // ========== NEW IPC EVENT HANDLERS ==========
+        
+        // Session banner updates
+        ipcRenderer.on('session-started', (event, session) => {
+            showSessionBanner(session);
+        });
+        
+        ipcRenderer.on('session-progress', (event, session) => {
+            if (currentBannerSession && currentBannerSession.sessionId === session.sessionId) {
+                updateBannerStats(session);
+            }
+        });
+        
+        ipcRenderer.on('session-ended', (event, session) => {
+            hideSessionBanner();
+        });
+        
+        // Wrong destination warning
+        ipcRenderer.on('wrong-destination', (event, data) => {
+            showWrongDestWarning(data.destPath, data.suggestedPaths);
+        });
+        
+        // Audio issue detection
+        ipcRenderer.on('audio-issue-detected', (event, data) => {
+            showAudioIssueModal(data);
+        });
+        
+        // Backup mode events
+        ipcRenderer.on('backup-disk-inserted', (event, diskInfo) => {
+            showBackupMode(diskInfo);
+        });
+        
+        ipcRenderer.on('backup-disk-removed', () => {
+            hideBackupMode();
+        });
+        
+        ipcRenderer.on('backup-verify-start', (event, data) => {
+            showBackupVerification(data.total, 0, 'Starting verification...');
+        });
+        
+        ipcRenderer.on('backup-verify-progress', (event, data) => {
+            updateBackupProgress(data.total, data.current, data.status);
+        });
+        
+        ipcRenderer.on('backup-verify-complete', (event, data) => {
+            showBackupResult(data.success, data.matched, data.failed);
+        });
+        
+        // Enhanced sd-recognized to show banner
+        const originalSdRecognizedHandler = ipcRenderer._events['sd-recognized'];
+        ipcRenderer.removeAllListeners('sd-recognized');
+        ipcRenderer.on('sd-recognized', (event, sdCard) => {
+            addActivity(`Camera ${sdCard.camera_number}${sdCard.sd_label} connected`, 'success');
+            showToast('Camera Ready', `Camera ${sdCard.camera_number}${sdCard.sd_label || ''} connected`, 'success');
+            showMascotMessage('sdRecognized', { camera: `${sdCard.camera_number}${sdCard.sd_label || ''}` }, 'success', 4000);
+            updateMascotIndicator('online');
+            updateMiniStatus(true, 'Active Session');
+        });
+        
+        // Enhanced sd-safe-removal to hide banner
+        const originalSdSafeRemovalHandler = ipcRenderer._events['sd-safe-removal'];
+        ipcRenderer.removeAllListeners('sd-safe-removal');
+        ipcRenderer.on('sd-safe-removal', (event, session) => {
+            hideSessionBanner();
+            addActivity(`Camera ${session.cameraNumber}${session.sdLabel} safely removed`, 'success');
+            showToast('Safe Removal', `Camera ${session.cameraNumber}${session.sdLabel} done`, 'success');
+            showMascotMessage('sdSafeRemoval', {}, 'success', 4000);
+            updateMiniStatus(true, 'Connected');
+        });
+        
+        // Enhanced sd-early-removal to hide banner
+        const originalEarlyRemovalHandler = ipcRenderer._events['sd-early-removal'];
+        ipcRenderer.removeAllListeners('sd-early-removal');
+        ipcRenderer.on('sd-early-removal', (event, data) => {
+            hideSessionBanner();
+            currentSession = data.session;
+            document.getElementById('pendingFilesCount').textContent = data.pendingFiles;
+            document.getElementById('earlyRemovalModal').classList.add('active');
+            showToast('Warning!', `${data.pendingFiles} files not copied!`, 'error', 10000);
+            showMascotMessage('sdEarlyRemoval', { count: data.pendingFiles }, 'error', 6000);
+        });
+
     </script>
 </body>
 </html>

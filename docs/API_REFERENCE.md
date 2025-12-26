@@ -6,7 +6,7 @@
 
 ## Base URL
 ```
-https://api.gate1system.org/api
+https://api.gate1.cloud/api
 ```
 
 ## Authentication

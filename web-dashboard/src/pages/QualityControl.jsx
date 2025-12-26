@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { qualityControlService, eventService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { qualityControlService } from '../services/api';
 import {
   CheckCircle,
   AlertTriangle,
@@ -52,33 +53,19 @@ function StatCard({ title, value, subtitle, icon: Icon, color }) {
 }
 
 export default function QualityControl() {
+  const { activeEvent } = useAuth();
   const [data, setData] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [selectedEvent, setSelectedEvent] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
-    loadEvents();
-  }, []);
-
-  useEffect(() => {
     loadData();
-  }, [selectedEvent]);
-
-  const loadEvents = async () => {
-    try {
-      const response = await eventService.getAll();
-      setEvents(response.data || response || []);
-    } catch (error) {
-      console.error('Failed to load events:', error);
-    }
-  };
+  }, [activeEvent?.id]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const response = await qualityControlService.getOverview(selectedEvent || undefined);
+      const response = await qualityControlService.getOverview(activeEvent?.id);
       setData(response);
     } catch (error) {
       console.error('Failed to load quality control data:', error);
@@ -103,30 +90,22 @@ export default function QualityControl() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Quality Control</h1>
-          <p className="text-gray-500">Monitor filename errors and editor performance</p>
+          <p className="text-gray-500 text-sm">
+            {activeEvent ? (
+              <>Event: <span className="font-medium text-sky-600">{activeEvent.name}</span></>
+            ) : (
+              'Monitor filename errors and editor performance'
+            )}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-          >
-            <option value="">All Events</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
       {/* Stats */}

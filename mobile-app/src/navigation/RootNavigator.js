@@ -22,12 +22,15 @@ import DailySummaryScreen from '../screens/DailySummaryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EventsScreen from '../screens/EventsScreen';
 import MediaBrowserScreen from '../screens/MediaBrowserScreen';
+import SearchPlaybackScreen from '../screens/SearchPlaybackScreen';
+import QAOfflineReviewScreen from '../screens/QAOfflineReviewScreen';
+import BackupOperationsScreen from '../screens/BackupOperationsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function TabNavigator() {
-  const { isGroupLeader, isQA, isBackup } = useAuth();
+  const { isAdmin, isTeamLead, isGroupLeader, isQA, isQARole, isBackup, isBackupRole, hasOperationalAccess } = useAuth();
 
   return (
     <Tab.Navigator
@@ -78,16 +81,32 @@ function TabNavigator() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Media"
-        component={MediaBrowserScreen}
-        options={{
-          tabBarLabel: 'Media',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="film" size={22} color={color} />
-          ),
-        }}
-      />
+      {/* Search tab - role-restricted per blueprint */}
+      {(hasOperationalAccess() || isGroupLeader() || isQARole()) && (
+        <Tab.Screen
+          name="Search"
+          component={SearchPlaybackScreen}
+          options={{
+            tabBarLabel: 'Search',
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="search" size={22} color={color} />
+            ),
+          }}
+        />
+      )}
+      {/* Backup Operations tab - critical for Backup team */}
+      {isBackupRole() && (
+        <Tab.Screen
+          name="Backups"
+          component={BackupOperationsScreen}
+          options={{
+            tabBarLabel: 'Backups',
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="cloud-upload" size={22} color={color} />
+            ),
+          }}
+        />
+      )}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
@@ -190,6 +209,16 @@ export default function RootNavigator() {
           <Stack.Screen
             name="DailySummary"
             component={DailySummaryScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="QAOfflineReview"
+            component={QAOfflineReviewScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="BackupOperations"
+            component={BackupOperationsScreen}
             options={{ headerShown: false }}
           />
         </>

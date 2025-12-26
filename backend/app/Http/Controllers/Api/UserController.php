@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -364,5 +367,272 @@ class UserController extends Controller
                 'offline' => $offlineCount,
             ],
         ]);
+    }
+
+    /**
+     * Bulk import users from CSV data
+     * CSV format: name,email,phone (header row optional)
+     */
+    public function bulkImport(Request $request): JsonResponse
+    {
+        $authUser = auth('api')->user();
+        
+        if (!$authUser->canManageUsers()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'users' => 'required|array|min:1|max:500',
+            'users.*.name' => 'required|string|max:255',
+            'users.*.email' => 'required|email',
+            'users.*.phone' => 'nullable|string|max:20',
+            'role' => 'required|string|exists:roles,slug',
+            'group_id' => 'nullable|exists:groups,id',
+            'send_invitations' => 'boolean',
+        ]);
+
+        // Verify user can assign this role
+        $manageableRoles = $authUser->getManageableRoles();
+        if (!in_array($request->role, $manageableRoles)) {
+            return response()->json(['error' => 'You cannot assign this role'], 403);
+        }
+
+        $role = Role::where('slug', $request->role)->first();
+        $group = $request->group_id ? Group::find($request->group_id) : null;
+        $sendInvitations = $request->get('send_invitations', true);
+
+        $results = [
+            'created' => [],
+            'skipped' => [],
+            'errors' => [],
+        ];
+
+        DB::beginTransaction();
+        try {
+            foreach ($request->users as $index => $userData) {
+                // Check if email already exists
+                if (User::where('email', $userData['email'])->exists()) {
+                    $results['skipped'][] = [
+                        'row' => $index + 1,
+                        'email' => $userData['email'],
+                        'reason' => 'Email already exists',
+                    ];
+                    continue;
+                }
+
+                // Generate temporary password or invitation token
+                $tempPassword = Str::random(12);
+                $invitationToken = $sendInvitations ? Str::random(64) : null;
+
+                $user = User::create([
+                    'name' => $userData['name'],
+                    'email' => $userData['email'],
+                    'phone' => $userData['phone'] ?? null,
+                    'password' => Hash::make($tempPassword),
+                    'is_active' => true,
+                    'invitation_token' => $invitationToken,
+                    'invitation_expires_at' => $invitationToken ? now()->addDays(7) : null,
+                    'invited_by' => $authUser->id,
+                ]);
+
+                $user->roles()->attach($role->id);
+
+                // Assign to group if specified
+                if ($group) {
+                    $user->groups()->attach($group->id);
+                }
+
+                $results['created'][] = [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'temp_password' => $sendInvitations ? null : $tempPassword,
+                    'invitation_token' => $invitationToken,
+                ];
+            }
+
+            DB::commit();
+
+            AuditLog::log('user.bulk_import', $authUser, 'User', null, null, [
+                'total_processed' => count($request->users),
+                'created' => count($results['created']),
+                'skipped' => count($results['skipped']),
+                'role' => $request->role,
+                'group_id' => $request->group_id,
+            ]);
+
+            return response()->json([
+                'message' => 'Bulk import completed',
+                'results' => $results,
+                'summary' => [
+                    'total' => count($request->users),
+                    'created' => count($results['created']),
+                    'skipped' => count($results['skipped']),
+                    'errors' => count($results['errors']),
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Import failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate invitation link for self-registration
+     */
+    public function createInvitation(Request $request): JsonResponse
+    {
+        $authUser = auth('api')->user();
+        
+        if (!$authUser->canManageUsers()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'role' => 'required|string|exists:roles,slug',
+            'group_id' => 'nullable|exists:groups,id',
+            'max_uses' => 'nullable|integer|min:1|max:500',
+            'expires_days' => 'nullable|integer|min:1|max:30',
+        ]);
+
+        // Verify user can assign this role
+        $manageableRoles = $authUser->getManageableRoles();
+        if (!in_array($request->role, $manageableRoles)) {
+            return response()->json(['error' => 'You cannot create invitations for this role'], 403);
+        }
+
+        $token = Str::random(32);
+        $expiresAt = now()->addDays($request->get('expires_days', 7));
+
+        // Store invitation in database
+        $invitationId = DB::table('invitations')->insertGetId([
+            'token' => $token,
+            'role_slug' => $request->role,
+            'group_id' => $request->group_id,
+            'max_uses' => $request->get('max_uses', 100),
+            'uses_count' => 0,
+            'created_by' => $authUser->id,
+            'expires_at' => $expiresAt,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        AuditLog::log('invitation.create', $authUser, 'Invitation', $invitationId, null, [
+            'role' => $request->role,
+            'group_id' => $request->group_id,
+            'max_uses' => $request->get('max_uses', 100),
+        ]);
+
+        return response()->json([
+            'message' => 'Invitation created',
+            'invitation' => [
+                'id' => $invitationId,
+                'token' => $token,
+                'role' => $request->role,
+                'group_id' => $request->group_id,
+                'max_uses' => $request->get('max_uses', 100),
+                'expires_at' => $expiresAt->toIso8601String(),
+                'link' => config('app.frontend_url', 'http://localhost:5173') . '/register?invite=' . $token,
+            ],
+        ], 201);
+    }
+
+    /**
+     * List active invitations
+     */
+    public function listInvitations(): JsonResponse
+    {
+        $authUser = auth('api')->user();
+        
+        if (!$authUser->canManageUsers()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $query = DB::table('invitations')
+            ->leftJoin('users', 'invitations.created_by', '=', 'users.id')
+            ->leftJoin('groups', 'invitations.group_id', '=', 'groups.id')
+            ->select(
+                'invitations.*',
+                'users.name as created_by_name',
+                'groups.name as group_name',
+                'groups.group_code'
+            )
+            ->where('invitations.expires_at', '>', now())
+            ->whereRaw('invitations.uses_count < invitations.max_uses');
+
+        // Non-admins can only see their own invitations
+        if (!$authUser->isAdmin()) {
+            $query->where('invitations.created_by', $authUser->id);
+        }
+
+        $invitations = $query->orderByDesc('invitations.created_at')->get();
+
+        return response()->json([
+            'invitations' => $invitations->map(fn($inv) => [
+                'id' => $inv->id,
+                'token' => $inv->token,
+                'role' => $inv->role_slug,
+                'group_id' => $inv->group_id,
+                'group_name' => $inv->group_name,
+                'group_code' => $inv->group_code,
+                'max_uses' => $inv->max_uses,
+                'uses_count' => $inv->uses_count,
+                'remaining' => $inv->max_uses - $inv->uses_count,
+                'created_by' => $inv->created_by_name,
+                'expires_at' => $inv->expires_at,
+                'link' => config('app.frontend_url', 'http://localhost:5173') . '/register?invite=' . $inv->token,
+            ]),
+        ]);
+    }
+
+    /**
+     * Revoke/delete an invitation
+     */
+    public function revokeInvitation(int $id): JsonResponse
+    {
+        $authUser = auth('api')->user();
+        
+        if (!$authUser->canManageUsers()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $invitation = DB::table('invitations')->where('id', $id)->first();
+        
+        if (!$invitation) {
+            return response()->json(['error' => 'Invitation not found'], 404);
+        }
+
+        // Non-admins can only revoke their own invitations
+        if (!$authUser->isAdmin() && $invitation->created_by !== $authUser->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        DB::table('invitations')->where('id', $id)->delete();
+
+        AuditLog::log('invitation.revoke', $authUser, 'Invitation', $id, null, []);
+
+        return response()->json(['message' => 'Invitation revoked']);
+    }
+
+    /**
+     * Download CSV template for bulk import
+     */
+    public function downloadTemplate(): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="users_import_template.csv"',
+        ];
+
+        return response()->stream(function () {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['name', 'email', 'phone']);
+            fputcsv($handle, ['John Doe', 'john@example.com', '+1234567890']);
+            fputcsv($handle, ['Jane Smith', 'jane@example.com', '']);
+            fclose($handle);
+        }, 200, $headers);
     }
 }

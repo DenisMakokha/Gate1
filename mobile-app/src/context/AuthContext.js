@@ -50,10 +50,26 @@ export function AuthProvider({ children }) {
   };
 
   const hasRole = (role) => user?.roles?.includes(role);
+  const hasAnyRole = (roles) => roles.some(role => user?.roles?.includes(role));
+  
+  // Role checks
   const isAdmin = () => hasRole('admin');
+  const isTeamLead = () => hasRole('team-lead');
   const isGroupLeader = () => hasRole('group-leader');
+  const isQALead = () => hasRole('qa-lead');
   const isQA = () => hasRole('qa');
+  const isBackupLead = () => hasRole('backup-lead');
   const isBackup = () => hasRole('backup');
+  const isEditor = () => hasRole('editor');
+  
+  // Helper: Has operational admin rights (admin or team-lead)
+  const hasOperationalAccess = () => isAdmin() || isTeamLead();
+  
+  // Helper: Any QA role
+  const isQARole = () => isQA() || isQALead();
+  
+  // Helper: Any Backup role
+  const isBackupRole = () => isBackup() || isBackupLead();
 
   return (
     <AuthContext.Provider value={{
@@ -62,10 +78,18 @@ export function AuthProvider({ children }) {
       login,
       logout,
       hasRole,
+      hasAnyRole,
       isAdmin,
+      isTeamLead,
       isGroupLeader,
+      isQALead,
       isQA,
+      isBackupLead,
       isBackup,
+      isEditor,
+      hasOperationalAccess,
+      isQARole,
+      isBackupRole,
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,12 +1,92 @@
 import React, { useState, useEffect } from 'react';
 import { issueService } from '../services/api';
-import { AlertTriangle, CheckCircle, Clock, ArrowUp, Eye, MessageSquare } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, ArrowUp, Eye, MessageSquare, Play, X, Video } from 'lucide-react';
+
+// Video Playback Modal for QA Issue Review
+function IssuePlaybackModal({ issue, onClose }) {
+  if (!issue) return null;
+  
+  const media = issue.media;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div>
+            <h3 className="font-semibold text-gray-900">Review Issue: {issue.issue_id}</h3>
+            <p className="text-sm text-gray-500">{media?.filename || 'Unknown file'}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        {/* Video Player */}
+        <div className="aspect-video bg-black">
+          {media?.preview_url ? (
+            <video
+              controls
+              autoPlay
+              className="w-full h-full"
+              src={media.preview_url}
+            >
+              Your browser does not support video playback.
+            </video>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <div className="text-center">
+                <Video className="w-16 h-16 mx-auto mb-2 opacity-50" />
+                <p>Preview not available</p>
+                <p className="text-sm">Request playback from backup disk</p>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Issue Details */}
+        <div className="p-4 bg-gray-50">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+            <div>
+              <span className="text-gray-500">Type:</span>
+              <span className="ml-2 font-medium">{issue.type?.replace('_', ' ')}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Severity:</span>
+              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                issue.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                issue.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                'bg-yellow-100 text-yellow-700'
+              }`}>{issue.severity}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Camera:</span>
+              <span className="ml-2 font-medium">{media?.camera_number || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Reported:</span>
+              <span className="ml-2 font-medium">{issue.reporter?.name || 'Unknown'}</span>
+            </div>
+          </div>
+          {issue.description && (
+            <div className="p-3 bg-white rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-700">{issue.description}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Issues() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('open');
   const [selectedIssue, setSelectedIssue] = useState(null);
+  const [playbackIssue, setPlaybackIssue] = useState(null);
   const [resolutionNotes, setResolutionNotes] = useState('');
 
   useEffect(() => {
@@ -165,10 +245,18 @@ export default function Issues() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
+                      {/* Playback button for QA review */}
+                      <button
+                        onClick={() => setPlaybackIssue(issue)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                        title="Play & Review"
+                      >
+                        <Play className="w-4 h-4" />
+                      </button>
                       {issue.status === 'open' && (
                         <button
                           onClick={() => handleAcknowledge(issue.issue_id)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                          className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
                           title="Acknowledge"
                         >
                           <Eye className="w-4 h-4" />
@@ -238,6 +326,14 @@ export default function Issues() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Issue Playback Modal */}
+      {playbackIssue && (
+        <IssuePlaybackModal
+          issue={playbackIssue}
+          onClose={() => setPlaybackIssue(null)}
+        />
       )}
     </div>
   );
