@@ -73,12 +73,12 @@ COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Copy nginx configuration
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
 
-# Expose port
-EXPOSE 9000
+# Expose ports
+EXPOSE 80 9000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD php artisan --version || exit 1
+    CMD curl -f http://localhost/api/health || exit 1
 
-# Start PHP-FPM
-CMD ["php-fpm"]
+# Start supervisor (manages nginx + php-fpm)
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
