@@ -1,5 +1,7 @@
 # Gate 1 System
 
+[![Deployment Status](https://img.shields.io/badge/deployment-live-brightgreen)](https://gate1.cloud)
+
 **Media Chain, Quality & Evidence Management System (MCQEMS)**
 
 A comprehensive platform for managing large-scale testimonial video operations with human-first workflows, evidence-grade traceability, and real-time quality correction.
