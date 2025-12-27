@@ -24,6 +24,7 @@ import {
   Usb,
   FileWarning,
   Circle,
+  Eject,
 } from 'lucide-react';
 
 function ProgressBar({ percentage, color = 'sky', size = 'md' }) {

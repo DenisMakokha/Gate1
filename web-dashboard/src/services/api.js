@@ -190,8 +190,8 @@ export const exportService = {
 };
 
 export const qualityControlService = {
-  getOverview: (eventId) => api.get('/quality-control/overview', { params: { event_id: eventId } }),
-  getDashboard: (eventId) => api.get('/quality-control/dashboard', { params: { event_id: eventId } }),
+  getOverview: (eventId) => api.get('/quality-control', { params: { event_id: eventId } }),
+  getDashboard: (eventId) => api.get('/quality-control', { params: { event_id: eventId } }),
   getQueue: (params) => api.get('/quality-control/queue', { params }),
   submit: (mediaId, data) => api.post(`/quality-control/${mediaId}/submit`, data),
   getHistory: (mediaId) => api.get(`/quality-control/${mediaId}/history`),
@@ -199,15 +199,15 @@ export const qualityControlService = {
 };
 
 export const storageForecastService = {
-  getForecast: (params) => api.get('/storage/forecast', { params }),
-  getUsage: () => api.get('/storage/usage'),
-  getDisks: () => api.get('/storage/disks'),
+  getForecast: (params) => api.get('/storage', { params }),
+  getUsage: () => api.get('/storage'),
+  getDisks: () => api.get('/storage'),
 };
 
 export const storageService = {
-  getForecast: (params) => api.get('/storage/forecast', { params }),
-  getUsage: () => api.get('/storage/usage'),
-  getDisks: () => api.get('/storage/disks'),
+  getForecast: (params) => api.get('/storage', { params }),
+  getUsage: () => api.get('/storage'),
+  getDisks: () => api.get('/storage'),
 };
 
 export const mediaDeletionService = {

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { dashboardService } from '../services/api';
-import { useActiveEvent } from '../context/AuthContext';
 import {
   Activity,
   Camera,
