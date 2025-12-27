@@ -186,7 +186,7 @@ function updateTrayMenu(status = 'offline') {
 async function initializeServices() {
     const config = store.get('config', {});
     
-    apiService = new ApiService(config.apiUrl || 'http://127.0.0.1:8000/api');
+    apiService = new ApiService(config.apiUrl || 'https://api.gate1.cloud/api');
     
     // Set up token expiry handler
     apiService.setTokenExpiredCallback(() => {
@@ -729,7 +729,7 @@ ipcMain.handle('get-groups', async (event) => {
         // Ensure apiService is initialized
         if (!apiService) {
             const config = store.get('config', {});
-            apiService = new ApiService(config.apiUrl || 'http://127.0.0.1:8000/api');
+            apiService = new ApiService(config.apiUrl || 'https://api.gate1.cloud/api');
         }
         const response = await apiService.getGroups();
         logger.info('Groups fetched', response);
@@ -776,7 +776,7 @@ ipcMain.handle('login', async (event, credentials) => {
         // Ensure apiService is initialized
         if (!apiService) {
             const config = store.get('config', {});
-            apiService = new ApiService(config.apiUrl || 'http://127.0.0.1:8000/api');
+            apiService = new ApiService(config.apiUrl || 'https://api.gate1.cloud/api');
         }
         
         const response = await apiService.login(credentials);

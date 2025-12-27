@@ -1668,7 +1668,7 @@
                 <div id="serverConfigPanel" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-dark); border-radius: 8px;">
                     <div class="form-group" style="margin-bottom: 8px;">
                         <label class="form-label" style="font-size: 11px;">API Server URL</label>
-                        <input type="text" id="loginApiUrl" class="form-input" placeholder="http://127.0.0.1:8000/api" style="font-size: 12px;">
+                        <input type="text" id="loginApiUrl" class="form-input" placeholder="https://api.gate1.cloud/api" style="font-size: 12px;">
                     </div>
                     <button onclick="saveServerUrl()" class="btn btn-secondary" style="width: 100%; padding: 8px; font-size: 12px;">Save Server URL</button>
                 </div>
@@ -2056,7 +2056,7 @@
                     <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Server Configuration</h4>
                     <div class="form-group">
                         <label class="form-label">API Server URL</label>
-                        <input type="text" id="settingsApiUrl" class="form-input" placeholder="http://127.0.0.1:8000/api">
+                        <input type="text" id="settingsApiUrl" class="form-input" placeholder="https://api.gate1.cloud/api">
                     </div>
                 </div>
 
@@ -3112,7 +3112,7 @@
             const config = await ipcRenderer.invoke('get-store', 'config') || {};
             watchedFolders = config.watchedFolders || [];
             
-            document.getElementById('settingsApiUrl').value = config.apiUrl || 'http://127.0.0.1:8000/api';
+            document.getElementById('settingsApiUrl').value = config.apiUrl || 'https://api.gate1.cloud/api';
             document.getElementById('settingsAutoStart').checked = config.autoStart || false;
             document.getElementById('settingsMinimizeToTray').checked = config.minimizeToTray || false;
             document.getElementById('settingsNotifySync').checked = config.notifySync !== false;
@@ -3198,7 +3198,7 @@
             
             // Load current URL
             ipcRenderer.invoke('get-store', 'config').then(config => {
-                document.getElementById('loginApiUrl').value = config?.apiUrl || 'http://127.0.0.1:8000/api';
+                document.getElementById('loginApiUrl').value = config?.apiUrl || 'https://api.gate1.cloud/api';
             });
         }
 
