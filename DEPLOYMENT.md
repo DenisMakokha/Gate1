@@ -1,5 +1,7 @@
 # Gate1 System - Deployment Guide
 
+> Last updated: December 27, 2025
+
 ## 🏗️ Architecture Overview
 
 ```
