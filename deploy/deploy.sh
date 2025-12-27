@@ -78,7 +78,7 @@ log "Clearing Laravel caches..."
 docker compose exec -T app php artisan config:clear
 docker compose exec -T app php artisan cache:clear
 docker compose exec -T app php artisan route:clear
-docker compose exec -T app php artisan view:clear
+docker compose exec -T app php artisan view:clear 2>/dev/null || log "View cache already clear"
 
 # Run migrations
 log "Running database migrations..."
@@ -88,7 +88,7 @@ docker compose exec -T app php artisan migrate --force
 log "Optimizing for production..."
 docker compose exec -T app php artisan config:cache
 docker compose exec -T app php artisan route:cache
-docker compose exec -T app php artisan view:cache
+docker compose exec -T app php artisan view:cache 2>/dev/null || log "View cache skipped"
 
 # Build web dashboard
 log "Building web dashboard..."
