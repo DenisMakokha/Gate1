@@ -218,14 +218,17 @@ class ApiService {
     async ping() {
         const start = Date.now();
         try {
-            await this.client.get('/health', { timeout: 5000 });
+            const response = await this.client.get('/health', { timeout: 10000 });
+            console.log('Ping response:', response);
             return { online: true, latency: Date.now() - start };
         } catch (e) {
-            // Try heartbeat endpoint as fallback
+            console.error('Ping failed:', e.message);
+            // Try a simple HEAD request as fallback
             try {
-                await this.client.options('/', { timeout: 5000 });
+                await axios.get(this.baseUrl + '/health', { timeout: 10000 });
                 return { online: true, latency: Date.now() - start };
             } catch (e2) {
+                console.error('Fallback ping failed:', e2.message);
                 return { online: false, latency: null };
             }
         }

@@ -46,11 +46,6 @@ use App\Http\Controllers\Api\QualityControlController;
 use App\Http\Controllers\Api\MediaDeletionController;
 use App\Http\Controllers\Api\WorkAllocationController;
 
-// Health check endpoint (for agent ping)
-Route::get('/health', function () {
-    return response()->json(['status' => 'ok', 'timestamp' => now()->toISOString()]);
-});
-
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [RegistrationController::class, 'register']);
