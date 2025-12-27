@@ -39,6 +39,10 @@ log "Setting up SSH agent..."
 eval "$(ssh-agent -s)" > /dev/null 2>&1
 ssh-add ~/.ssh/github_deploy 2>/dev/null || warn "SSH key may already be loaded"
 
+# Fix permissions before git pull (Docker may have changed ownership)
+log "Fixing file ownership before pull..."
+sudo chown -R $(whoami):$(whoami) "$APP_DIR" 2>/dev/null || true
+
 # Pull latest code
 log "Pulling latest code from GitHub..."
 git fetch origin main
