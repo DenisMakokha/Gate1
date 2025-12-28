@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { dashboardService } from '../services/api';
 import EditorStatus from '../components/EditorStatus';
 import WorkflowProgress from '../components/WorkflowProgress';
+import LiveActivityFeed from '../components/LiveActivityFeed';
+import SessionBanner from '../components/SessionBanner';
+import AttentionModal from '../components/AttentionModal';
 import {
   Video,
   AlertTriangle,
@@ -15,6 +19,7 @@ import {
   Camera,
   Wifi,
   Circle,
+  RefreshCw,
 } from 'lucide-react';
 
 function StatCard({ title, value, icon: Icon, color, subtitle }) {
@@ -110,8 +115,61 @@ function GroupsHealth({ groups }) {
 
 export default function Dashboard() {
   const { user, isAdmin, isTeamLead, isGroupLeader, isQALead, isQA, isBackupLead, isBackup } = useAuth();
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activityItems, setActivityItems] = useState([]);
+  const [sessionState, setSessionState] = useState('IDLE');
+  const [attentionModal, setAttentionModal] = useState({ open: false, reason: null, details: null });
+
+  // Generate activity items from dashboard data
+  const generateActivityFromData = useCallback((dashData) => {
+    const items = [];
+    const now = Date.now();
+    
+    // Add recent issues as activity
+    if (dashData?.recent_issues) {
+      dashData.recent_issues.slice(0, 5).forEach((issue, idx) => {
+        items.push({
+          id: `issue-${issue.id || idx}`,
+          source: 'issues',
+          kind: issue.severity === 'critical' ? 'error' : 'warning',
+          title: `Issue: ${issue.type?.replace('_', ' ') || 'Unknown'}`,
+          message: `Reported by ${issue.reporter || 'Unknown'}`,
+          details: issue,
+          createdAt: now - (idx * 60000),
+        });
+      });
+    }
+
+    // Add system status updates
+    if (dashData?.overview) {
+      if (dashData.overview.active_sessions > 0) {
+        items.push({
+          id: 'sessions-active',
+          source: 'session',
+          kind: 'info',
+          title: `${dashData.overview.active_sessions} Active Sessions`,
+          message: 'SD cards currently being processed',
+          createdAt: now - 120000,
+        });
+      }
+      if (dashData.overview.pending_backups > 0) {
+        items.push({
+          id: 'backups-pending',
+          source: 'backup',
+          kind: dashData.overview.pending_backups > 10 ? 'warning' : 'info',
+          title: `${dashData.overview.pending_backups} Pending Backups`,
+          message: 'Files awaiting backup verification',
+          createdAt: now - 180000,
+        });
+      }
+    }
+
+    // Sort by createdAt descending
+    items.sort((a, b) => b.createdAt - a.createdAt);
+    return items;
+  }, []);
 
   useEffect(() => {
     loadDashboard();
@@ -123,7 +181,6 @@ export default function Dashboard() {
       if (isAdmin()) {
         response = await dashboardService.getAdmin();
       } else if (isTeamLead()) {
-        // Team Lead gets admin-level operational data
         response = await dashboardService.getAdmin();
       } else if (isGroupLeader()) {
         response = await dashboardService.getGroupLeader();
@@ -135,11 +192,35 @@ export default function Dashboard() {
         response = await dashboardService.getEditor();
       }
       setData(response);
+      
+      // Generate activity items
+      const activities = generateActivityFromData(response);
+      setActivityItems(activities);
+
+      // Determine session state based on data
+      if (response?.overview?.active_sessions > 0) {
+        setSessionState('SESSION_ACTIVE');
+      } else if (response?.overview?.open_issues > 5) {
+        setSessionState('ATTENTION_REQUIRED');
+      }
+
     } catch (error) {
       console.error('Failed to load dashboard:', error);
+      toast.error('Dashboard Error', 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    toast.info('Refreshing', 'Updating dashboard data...');
+    await loadDashboard();
+    toast.success('Updated', 'Dashboard data refreshed');
+  };
+
+  const handleAttentionAction = (action) => {
+    toast.success('Action Recorded', `Decision: ${action.id}`);
+    setAttentionModal({ open: false, reason: null, details: null });
   };
 
   if (loading) {
@@ -154,9 +235,52 @@ export default function Dashboard() {
   if (isAdmin() && data?.overview) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Global Command View</h1>
-          <p className="text-gray-500">System-wide situational awareness — signals, not metrics</p>
+        {/* Attention Modal */}
+        <AttentionModal
+          open={attentionModal.open}
+          onClose={() => setAttentionModal({ open: false, reason: null, details: null })}
+          reason={attentionModal.reason}
+          severity={attentionModal.severity}
+          title={attentionModal.title}
+          message={attentionModal.message}
+          details={attentionModal.details}
+          onAction={handleAttentionAction}
+        />
+
+        {/* Session State Banner */}
+        {sessionState !== 'IDLE' && (
+          <SessionBanner
+            state={sessionState}
+            eventName={data.overview.active_event_name}
+            onAction={(action) => {
+              if (action === 'review') {
+                setAttentionModal({
+                  open: true,
+                  reason: 'ATTENTION_REQUIRED',
+                  severity: 'warning',
+                  title: 'Issues Require Attention',
+                  message: `There are ${data.overview.open_issues} open issues that need review.`,
+                  details: { openIssues: data.overview.open_issues, criticalIssues: data.overview.critical_issues },
+                });
+              }
+            }}
+            dismissible
+            onDismiss={() => setSessionState('IDLE')}
+          />
+        )}
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Global Command View</h1>
+            <p className="text-gray-500">System-wide situational awareness — signals, not metrics</p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
         </div>
 
         {/* Primary KPIs - Signals per blueprint */}
@@ -232,9 +356,17 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <IssuesList issues={data.recent_issues} />
           <GroupsHealth groups={data.groups_health} />
+          <LiveActivityFeed 
+            items={activityItems} 
+            maxItems={10}
+            title="Live Activity"
+            showRefresh
+            onRefresh={handleRefresh}
+            compact
+          />
         </div>
 
         {/* Workflow Progress */}

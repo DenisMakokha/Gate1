@@ -33,7 +33,10 @@ import {
   HelpCircle,
   Download,
   Target,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
+import { ConnectionStatus, LiveStatus } from './StatusPills';
 
 export default function Layout({ children }) {
   const { user, logout, isAdmin, isGroupLeader, isQA, isBackup } = useAuth();
@@ -265,6 +268,12 @@ export default function Layout({ children }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Status Pills */}
+              <div className="hidden lg:flex items-center gap-2 mr-2">
+                <ConnectionStatus online={true} />
+                <LiveStatus isLive={true} label="System Live" />
+              </div>
+
               {/* Dark Mode Toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}

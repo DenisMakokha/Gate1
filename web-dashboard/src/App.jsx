@@ -1,7 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import Layout from './components/Layout';
+import Toasts from './components/Toasts';
 
 // Auth pages
 import Login from './pages/Login';
@@ -71,8 +73,9 @@ function PrivateRoute({ children, roles }) {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -217,8 +220,10 @@ function App() {
           } />
           
           <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+          <Toasts />
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }
