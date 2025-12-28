@@ -1,0 +1,30 @@
+GATE 1 AGENT
+
+Copyright © Nelium Systems
+
+This software is licensed, not sold.
+
+By installing and using this application (“Gate 1 Agent”), you agree to the terms of this license.
+
+1. Permitted Use
+You may use Gate 1 Agent only for authorized event/media workflows as designated by Nelium Systems and/or the event organizer.
+
+2. Restrictions
+You may not:
+- Reverse engineer, decompile, or disassemble the application except to the extent allowed by applicable law.
+- Modify, redistribute, sublicense, rent, lease, or resell the application.
+- Remove or alter any copyright, trademark, or attribution notices.
+
+3. Data & Connectivity
+Gate 1 Agent may communicate with a Gate 1 backend service to enable session workflows, backup verification, and reporting. Some actions may be queued locally when offline and synchronized when connectivity returns.
+
+4. No Warranty
+The application is provided “AS IS” without warranty of any kind. To the maximum extent permitted by law, Nelium Systems disclaims all warranties.
+
+5. Limitation of Liability
+To the maximum extent permitted by law, Nelium Systems shall not be liable for any indirect, incidental, special, or consequential damages.
+
+6. Ownership
+All rights, title, and interest in and to Gate 1 Agent remain with Nelium Systems.
+
+Powered by Nelium Systems

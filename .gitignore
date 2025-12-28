@@ -9,6 +9,13 @@ desktop-agent/dist/
 desktop-agent/installer/
 desktop-agent/*.zip
 
+# Large build artifacts (desktop-agent-v2)
+desktop-agent-v2/node_modules/
+desktop-agent-v2/dist/
+desktop-agent-v2/release/
+desktop-agent-v2/build/tmp-icon/
+desktop-agent-v2/*.zip
+
 # Android build (can be regenerated with expo prebuild)
 mobile-app/android/
 

@@ -1,0 +1,93 @@
+html, body { height: 100%; }
+body { margin: 0; font-family: Arial, sans-serif; }
+
+.container { padding: 0; }
+.h3 { margin: 0 0 8px 0; }
+.muted { color: #666; }
+
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 12px; }
+.cardHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+pre { background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 8px; overflow: auto; max-height: 260px; }
+
+input, select, button { font-size: 14px; padding: 6px 8px; }
+button { cursor: pointer; }
+
+.app { height: 100vh; display: flex; flex-direction: column; }
+.main { flex: 1; overflow: auto; padding: 14px; background: #fbfbfd; }
+
+.header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; background: white; }
+.headerLeft { display: flex; align-items: center; gap: 10px; }
+.headerRight { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brandMark { width: 34px; height: 34px; border-radius: 9px; background: #111827; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.brandTitle { font-weight: 700; }
+.brandSub { font-size: 12px; color: #6b7280; }
+
+.brandHero { background: radial-gradient(1200px 300px at 50% 0%, #eef2ff, #ffffff); border-bottom: 1px solid #e5e7eb; }
+.brandBanner { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; gap: 12px; }
+.brandBannerLeft { display: flex; flex-direction: column; }
+.brandBannerTitle { font-weight: 800; letter-spacing: -0.02em; font-size: 16px; color: #111827; }
+.brandBannerSub { font-size: 12px; color: #6b7280; }
+.brandBannerRight { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.mascotWrap { padding: 0 14px 12px 14px; }
+.mascotCard { display: flex; align-items: center; gap: 12px; border: 1px solid #e5e7eb; background: rgba(255,255,255,0.9); border-radius: 14px; padding: 10px; }
+.mascotArt { width: 240px; max-width: 48%; display: flex; justify-content: center; }
+.mascotText { flex: 1; min-width: 160px; }
+.mascotHeadline { font-weight: 800; letter-spacing: -0.02em; }
+.mascotSub { margin-top: 4px; font-size: 13px; color: #6b7280; }
+
+.pill { border: 1px solid #e5e7eb; border-radius: 999px; padding: 4px 10px; font-size: 12px; background: #fff; color: #111827; }
+.pillOk { border-color: #bbf7d0; background: #f0fdf4; }
+.pillWarn { border-color: #fed7aa; background: #fff7ed; }
+.pillBlue { border-color: #bfdbfe; background: #eff6ff; }
+.pillRed { border-color: #fecaca; background: #fef2f2; }
+.pillNeutral { border-color: #e5e7eb; background: #f9fafb; }
+
+.tabs { display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; background: white; }
+.tab { border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 999px; padding: 6px 10px; font-size: 13px; }
+.tabActive { background: #111827; color: white; border-color: #111827; }
+
+.btn { border: 1px solid #e5e7eb; background: white; border-radius: 8px; padding: 6px 10px; }
+
+.banners { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.banner { border: 1px solid #e5e7eb; background: white; border-radius: 10px; padding: 10px; display:flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bannerWarn { border-color: #fed7aa; background: #fff7ed; }
+.bannerError { border-color: #fecaca; background: #fef2f2; }
+.bannerTitle { font-weight: 700; }
+.bannerMsg { color: #374151; font-size: 13px; }
+.bannerInline { margin-top: 8px; padding: 8px; border: 1px dashed #e5e7eb; border-radius: 10px; color: #6b7280; background: #f9fafb; }
+
+.toasts { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+.toast { width: 280px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+.toastSuccess { border-color: #bbf7d0; }
+.toastWarn { border-color: #fed7aa; }
+.toastError { border-color: #fecaca; }
+.toastTitle { font-weight: 700; margin-bottom: 2px; }
+.toastMsg { color: #6b7280; font-size: 13px; }
+
+.modalOverlay { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.modal { width: min(560px, 100%); background: white; border-radius: 14px; border: 1px solid #e5e7eb; box-shadow: 0 18px 50px rgba(0,0,0,0.22); overflow: hidden; }
+.modalHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border-bottom: 1px solid #e5e7eb; background: #ffffff; }
+.modalTitle { font-weight: 900; letter-spacing: -0.02em; }
+.modalBody { padding: 12px; }
+.modalFooter { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e5e7eb; justify-content: flex-end; background: #f9fafb; flex-wrap: wrap; }
+
+.page { display: flex; flex-direction: column; gap: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.kpi { border: 1px solid #e5e7eb; background: white; border-radius: 10px; padding: 10px; }
+.kpiLabel { font-size: 12px; color: #6b7280; }
+.kpiValue { font-size: 18px; font-weight: 700; margin-top: 4px; }
+
+.feed { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.feedRow { display: grid; grid-template-columns: 80px 1fr; gap: 10px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; }
+.feedTime { font-size: 12px; color: #6b7280; }
+.feedTitle { font-weight: 700; }
+.feedMeta { font-size: 12px; color: #6b7280; }
+
+.sectionTitle { margin-top: 6px; font-weight: 700; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.listRow { display:flex; align-items:center; justify-content: space-between; gap: 10px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; }
+.listMain { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
