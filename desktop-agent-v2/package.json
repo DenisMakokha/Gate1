@@ -39,7 +39,6 @@
     "productName": "Gate 1 Agent",
     "copyright": "Copyright © Nelium Systems",
     "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
-    "publisherName": "Nelium Systems",
     "files": [
       "dist/**/*",
       "node_modules/**/*",
@@ -75,7 +74,6 @@
       "installerHeader": "build/installerHeader.bmp",
       "installerSidebar": "build/installerSidebar.bmp",
       "runAfterFinish": true,
-      "runAfterFinishOnInstall": true,
       "license": "build/license.txt",
       "include": "build/installer.nsh"
     }
