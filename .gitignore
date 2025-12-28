@@ -22,6 +22,10 @@ mobile-app/android/
 # Lock files (optional - can be regenerated)
 package-lock.json
 
+# Allow lockfiles needed for CI builds
+!desktop-agent-v2/package-lock.json
+!desktop-agent-v2/renderer/package-lock.json
+
 # Environment files
 .env
 .env.local
