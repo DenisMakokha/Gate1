@@ -24,7 +24,7 @@ import {
   Usb,
   FileWarning,
   Circle,
-  Eject,
+  LogOut,
 } from 'lucide-react';
 
 function ProgressBar({ percentage, color = 'sky', size = 'md' }) {
@@ -465,7 +465,7 @@ export default function AnalyticsDashboard() {
             <StatCard
               title="Early Removals"
               value={incidentData?.summary?.early_removals || 0}
-              icon={Eject}
+              icon={LogOut}
               color="amber"
             />
             <StatCard
