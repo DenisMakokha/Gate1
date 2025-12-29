@@ -847,7 +847,7 @@ export default function Dashboard() {
                     <div>
                       <p className="font-medium text-gray-900">{issue.type?.replace('_', ' ')}</p>
                       <p className="text-sm text-gray-500">
-                        Camera {issue.camera_number || '?'} • {issue.group?.group_code}
+                        Camera {issue.camera_number || issue.media?.camera_number || '?'} • {issue.group?.group_code}
                       </p>
                     </div>
                     <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">

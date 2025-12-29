@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Agent;
 use App\Models\AuditLog;
 use App\Models\Backup;
+use App\Models\BackupDisk;
 use App\Models\CameraSession;
 use App\Models\Event;
 use App\Models\Group;
@@ -143,6 +144,18 @@ class DashboardController extends Controller
 
         $memberIds = $groups->flatMap(fn($g) => $g->members->pluck('id'));
 
+        $eventId = $this->resolveEventId($request);
+        $groupMediaQuery = Media::whereIn('group_id', $groupIds)
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId));
+
+        $groupTotalMedia = (clone $groupMediaQuery)->count();
+        $groupVerifiedMedia = (clone $groupMediaQuery)
+            ->whereHas('backups', fn($q) => $q->where('is_verified', true))
+            ->count();
+        $backupPercentage = $groupTotalMedia > 0
+            ? round(($groupVerifiedMedia / $groupTotalMedia) * 100)
+            : 0;
+
         return response()->json([
             'groups' => $groups->map(fn($g) => [
                 'id' => $g->id,
@@ -161,6 +174,7 @@ class DashboardController extends Controller
                 'media_today' => Media::whereIn('editor_id', $memberIds)
                     ->whereDate('created_at', today())
                     ->count(),
+                'backup_percentage' => $backupPercentage,
             ],
             'recent_issues' => Issue::whereIn('group_id', $groupIds)
                 ->with(['media', 'reporter'])
@@ -175,9 +189,28 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isQA() && !$user->isAdmin()) {
+        if (!$user->isQA() && !$user->isQALead() && !$user->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
+
+        $severityDistribution = Issue::whereIn('status', ['open', 'acknowledged', 'in_progress'])
+            ->selectRaw('severity, count(*) as count')
+            ->groupBy('severity')
+            ->pluck('count', 'severity');
+
+        $problemCameras = Issue::whereIn('status', ['open', 'acknowledged', 'in_progress', 'escalated'])
+            ->whereHas('media')
+            ->with('media:id,camera_number')
+            ->get()
+            ->groupBy(fn($i) => $i->media?->camera_number)
+            ->filter(fn($items, $cameraNumber) => !empty($cameraNumber) && $items->count() >= 2)
+            ->map(fn($items, $cameraNumber) => [
+                'camera_number' => $cameraNumber,
+                'issue_count' => $items->count(),
+            ])
+            ->sortByDesc('issue_count')
+            ->values()
+            ->take(10);
 
         return response()->json([
             'issue_summary' => [
@@ -196,12 +229,19 @@ class DashboardController extends Controller
                 ->selectRaw('severity, count(*) as count')
                 ->groupBy('severity')
                 ->pluck('count', 'severity'),
+            'severity_distribution' => [
+                'critical' => (int) ($severityDistribution['critical'] ?? 0),
+                'high' => (int) ($severityDistribution['high'] ?? 0),
+                'medium' => (int) ($severityDistribution['medium'] ?? 0),
+                'low' => (int) ($severityDistribution['low'] ?? 0),
+            ],
             'critical_issues' => Issue::where('severity', 'critical')
                 ->whereIn('status', ['open', 'acknowledged', 'escalated'])
                 ->with(['media', 'reporter', 'group'])
                 ->orderByDesc('created_at')
                 ->limit(20)
                 ->get(),
+            'problem_cameras' => $problemCameras,
         ]);
     }
 
@@ -209,13 +249,34 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isBackupTeam() && !$user->isAdmin()) {
+        if (!$user->isBackupTeam() && !$user->isBackupLead() && !$user->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        $totalMedia = Media::count();
-        $backedUp = Media::whereHas('backups')->count();
-        $verified = Media::whereHas('backups', fn($q) => $q->where('is_verified', true))->count();
+        $eventId = $this->resolveEventId($request);
+
+        $totalMedia = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))->count();
+        $backedUp = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereHas('backups')
+            ->count();
+        $verified = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereHas('backups', fn($q) => $q->where('is_verified', true))
+            ->count();
+
+        $verificationFailures = Backup::when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
+            ->where('is_verified', false)
+            ->whereNotNull('checksum')
+            ->count();
+
+        $diskStatus = BackupDisk::query()
+            ->orderBy('status')
+            ->orderBy('name')
+            ->get()
+            ->map(fn($d) => [
+                'id' => $d->id,
+                'label' => $d->name,
+                'status' => $d->status,
+            ]);
 
         return response()->json([
             'coverage' => [
@@ -225,15 +286,25 @@ class DashboardController extends Controller
                 'pending' => $totalMedia - $backedUp,
                 'unverified' => $backedUp - $verified,
                 'coverage_percentage' => $totalMedia > 0 ? round(($verified / $totalMedia) * 100, 2) : 0,
+                'disks_in_use' => BackupDisk::where('status', 'active')->count(),
+                'verification_failures' => $verificationFailures,
             ],
-            'by_editor' => Media::whereDoesntHave('backups', fn($q) => $q->where('is_verified', true))
-                ->selectRaw('editor_id, count(*) as pending_count')
+            'pending_by_editor' => Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+                ->whereDoesntHave('backups', fn($q) => $q->where('is_verified', true))
+                ->selectRaw('editor_id, count(*) as pending')
                 ->groupBy('editor_id')
                 ->with('editor:id,name')
-                ->orderByDesc('pending_count')
+                ->orderByDesc('pending')
                 ->limit(20)
-                ->get(),
+                ->get()
+                ->map(fn($row) => [
+                    'id' => $row->editor_id,
+                    'name' => $row->editor?->name,
+                    'pending' => (int) $row->pending,
+                ]),
+            'disk_status' => $diskStatus,
             'recent_backups' => Backup::with(['media', 'backedUpBy'])
+                ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
                 ->where('is_verified', true)
                 ->orderByDesc('verified_at')
                 ->limit(20)
