@@ -38,10 +38,14 @@ class DashboardController extends Controller
         $eventId = $request->get('event_id');
 
         // Calculate camera health metrics
-        $totalCameras = \App\Models\Camera::count();
+        $totalCameras = \App\Models\Camera::when($eventId, fn($q) => $q->where('event_id', $eventId))->count();
         $camerasWithIssues = Issue::whereIn('status', ['open', 'acknowledged'])
             ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
-            ->distinct('camera_id')->count('camera_id');
+            ->whereHas('media')
+            ->get()
+            ->pluck('media.camera_number')
+            ->unique()
+            ->count();
         $camerasHealthy = max(0, $totalCameras - $camerasWithIssues);
         
         // Count early removals today
