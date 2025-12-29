@@ -209,7 +209,7 @@ class RegistrationController extends Controller
     {
         $authUser = auth('api')->user();
         
-        if (!$authUser->isAdmin() && !$authUser->isGroupLeader()) {
+        if (!$authUser->hasOperationalAccess() && !$authUser->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -219,7 +219,7 @@ class RegistrationController extends Controller
         ]);
 
         // Group leaders can only invite to their own groups
-        if ($authUser->isGroupLeader() && !$authUser->isAdmin()) {
+        if ($authUser->isGroupLeader() && !$authUser->hasOperationalAccess()) {
             $ledGroupIds = $authUser->ledGroups->pluck('id')->toArray();
             if ($request->group_id && !in_array($request->group_id, $ledGroupIds)) {
                 return response()->json(['error' => 'You can only invite users to your own groups'], 403);
@@ -262,7 +262,7 @@ class RegistrationController extends Controller
     {
         $authUser = auth('api')->user();
         
-        if (!$authUser->isAdmin() && !$authUser->isGroupLeader()) {
+        if (!$authUser->hasOperationalAccess() && !$authUser->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -271,7 +271,7 @@ class RegistrationController extends Controller
             ->with('groups');
 
         // Group leaders only see users in their groups or unassigned
-        if ($authUser->isGroupLeader() && !$authUser->isAdmin()) {
+        if ($authUser->isGroupLeader() && !$authUser->hasOperationalAccess()) {
             $ledGroupIds = $authUser->ledGroups->pluck('id')->toArray();
             $query->where(function ($q) use ($ledGroupIds) {
                 $q->whereHas('groups', function ($gq) use ($ledGroupIds) {
@@ -289,7 +289,7 @@ class RegistrationController extends Controller
     {
         $authUser = auth('api')->user();
         
-        if (!$authUser->isAdmin() && !$authUser->isGroupLeader()) {
+        if (!$authUser->hasOperationalAccess() && !$authUser->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -305,7 +305,7 @@ class RegistrationController extends Controller
         }
 
         // Group leaders can only approve for their own groups
-        if ($authUser->isGroupLeader() && !$authUser->isAdmin()) {
+        if ($authUser->isGroupLeader() && !$authUser->hasOperationalAccess()) {
             $ledGroupIds = $authUser->ledGroups->pluck('id')->toArray();
             if (!in_array($request->group_id, $ledGroupIds)) {
                 return response()->json(['error' => 'You can only approve users for your own groups'], 403);
@@ -349,7 +349,7 @@ class RegistrationController extends Controller
     {
         $authUser = auth('api')->user();
         
-        if (!$authUser->isAdmin() && !$authUser->isGroupLeader()) {
+        if (!$authUser->hasOperationalAccess() && !$authUser->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
