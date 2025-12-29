@@ -1952,6 +1952,9 @@ async function initCore() {
       audit.info('session.ended_local', { sessionId: s.sessionId, sdHardwareId: s.sdHardwareId });
       mainWindow?.webContents?.send('session:ended', s);
 
+      // Ensure any pending media indexes are flushed promptly when a session ends.
+      void flushMediaBatch('session_end');
+
       const { filesCopied, filesPending } = getCopyCounts();
       const b = lastBackupSummaryBySessionId[String(s.sessionId)];
       const backupLine = b
@@ -2132,6 +2135,7 @@ async function initCore() {
       if (filesPending <= 0) {
         // Safe removal -> close server session automatically
         void (async () => {
+          await flushMediaBatch('session_end');
           const status = await endServerSession({
             serverSessionId,
             removalDecision: 'safe',
@@ -2830,6 +2834,7 @@ function registerIpc() {
       }
 
       // Confirm early removal: end server session with early_confirmed
+      await flushMediaBatch('session_end');
       const status = await endServerSession({
         serverSessionId,
         removalDecision: 'early_confirmed',
@@ -3058,6 +3063,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+
+  // Best-effort: flush any pending media batch so file indexes aren't lost.
+  void flushMediaBatch('shutdown');
 });
 
 app.on('activate', () => {
