@@ -302,20 +302,10 @@ export default function Layout({ children }) {
                       </Link>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
-                      <div className="p-3 hover:bg-gray-50 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">New Issue Reported</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Camera CAM-042 reported corrupt file</p>
-                        <p className="text-xs text-gray-400 mt-1">5 min ago</p>
-                      </div>
-                      <div className="p-3 hover:bg-gray-50 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">Backup Completed</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Daily backup completed successfully</p>
-                        <p className="text-xs text-gray-400 mt-1">1 hour ago</p>
-                      </div>
-                      <div className="p-3 hover:bg-gray-50">
-                        <p className="text-sm font-medium text-gray-900">Storage Warning</p>
-                        <p className="text-xs text-gray-500 mt-0.5">DISK-003 is at 85% capacity</p>
-                        <p className="text-xs text-gray-400 mt-1">3 hours ago</p>
+                      <div className="p-6 text-center">
+                        <Bell className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                        <p className="text-sm text-gray-600">No notifications</p>
+                        <p className="text-xs text-gray-400 mt-1">Open the Notifications page to see the latest updates.</p>
                       </div>
                     </div>
                     <div className="p-2 border-t border-gray-100">
