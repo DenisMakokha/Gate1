@@ -789,11 +789,21 @@ async function pollStreamJobsOnce(): Promise<void> {
     const start: number = Number(job?.start ?? 0);
     const end: number = Number(job?.end ?? -1);
 
-    if (!jobId || !filePath || !Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    if (!jobId || !filePath || !Number.isFinite(start) || !Number.isFinite(end)) {
       await api.request({
         method: 'POST',
         url: '/agent/stream/respond',
         data: { job_id: jobId ?? 'unknown', status: 400, error: 'invalid_job' },
+        timeoutMs: 20000,
+      });
+      return;
+    }
+
+    if (end < start) {
+      await api.request({
+        method: 'POST',
+        url: '/agent/stream/respond',
+        data: { job_id: jobId, status: 416, error: 'invalid_range' },
         timeoutMs: 20000,
       });
       return;
@@ -823,11 +833,24 @@ async function pollStreamJobsOnce(): Promise<void> {
     }
 
     const size = st.size;
+    if (size <= 0) {
+      await api.request({
+        method: 'POST',
+        url: '/agent/stream/respond',
+        data: { job_id: jobId, status: 404, error: 'empty_file' },
+        timeoutMs: 20000,
+      });
+      return;
+    }
+
     const safeStart = Math.max(0, Math.min(start, Math.max(0, size - 1)));
     const safeEnd = Math.max(safeStart, Math.min(end, Math.max(0, size - 1)));
     const maxChunk = 2 * 1024 * 1024;
     const boundedEnd = Math.min(safeEnd, safeStart + maxChunk - 1);
     const length = boundedEnd - safeStart + 1;
+
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === '.mp4' ? 'video/mp4' : ext === '.mov' ? 'video/quicktime' : 'application/octet-stream';
 
     const fh = await fs.open(filePath, 'r');
     try {
@@ -835,16 +858,17 @@ async function pollStreamJobsOnce(): Promise<void> {
       const { bytesRead } = await fh.read(buf, 0, length, safeStart);
       const out = buf.subarray(0, bytesRead);
 
+      const statusCode = safeStart === 0 && boundedEnd >= size - 1 ? 200 : 206;
       await api.request({
         method: 'POST',
         url: '/agent/stream/respond',
         data: {
           job_id: jobId,
-          status: 206,
+          status: statusCode,
           headers: {
-            'Content-Type': 'application/octet-stream',
+            'Content-Type': contentType,
             'Accept-Ranges': 'bytes',
-            'Content-Range': `bytes ${safeStart}-${safeStart + bytesRead - 1}/${size}`,
+            ...(statusCode === 206 ? { 'Content-Range': `bytes ${safeStart}-${safeStart + bytesRead - 1}/${size}` } : {}),
             'Content-Length': String(bytesRead),
           },
           data_base64: out.toString('base64'),

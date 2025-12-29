@@ -36,21 +36,29 @@ class AgentStreamController extends Controller
             return response()->json(['job' => null]);
         }
 
-        $jobId = array_shift($queue);
+        // Shift until we find a valid job or queue becomes empty.
+        while (count($queue) > 0) {
+            $jobId = array_shift($queue);
+            $jobKey = "stream_job:{$jobId}";
+            $job = Cache::get($jobKey);
+
+            // Persist trimmed queue.
+            Cache::put($queueKey, $queue, now()->addMinutes(5));
+
+            if (!$job || !is_array($job)) {
+                continue;
+            }
+
+            // Ensure this job is for this editor
+            if (($job['editor_id'] ?? null) !== $user->id) {
+                continue;
+            }
+
+            return response()->json(['job' => $job]);
+        }
+
         Cache::put($queueKey, $queue, now()->addMinutes(5));
-
-        $jobKey = "stream_job:{$jobId}";
-        $job = Cache::get($jobKey);
-        if (!$job || !is_array($job)) {
-            return response()->json(['job' => null]);
-        }
-
-        // Ensure this job is for this editor
-        if (($job['editor_id'] ?? null) !== $user->id) {
-            return response()->json(['job' => null]);
-        }
-
-        return response()->json(['job' => $job]);
+        return response()->json(['job' => null]);
     }
 
     public function respond(Request $request): JsonResponse
@@ -85,6 +93,9 @@ class AgentStreamController extends Controller
             'error' => $request->error,
             'at' => now()->toIso8601String(),
         ], now()->addSeconds(30));
+
+        // Best-effort cleanup: job details not needed after a response is recorded.
+        Cache::forget($jobKey);
 
         return response()->json(['ok' => true]);
     }

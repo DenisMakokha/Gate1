@@ -53,7 +53,10 @@ class MediaProxyController extends Controller
         $end = null;
         $maxChunk = 2 * 1024 * 1024; // 2MB
 
-        if ($range && preg_match('/bytes=(\d+)-(\d+)?/', $range, $m)) {
+        if ($range) {
+            if (!preg_match('/bytes=(\d+)-(\d+)?/', $range, $m)) {
+                return response()->json(['error' => 'Invalid Range'], 416);
+            }
             $start = (int) $m[1];
             if (isset($m[2]) && $m[2] !== '') {
                 $end = (int) $m[2];
@@ -84,7 +87,9 @@ class MediaProxyController extends Controller
         $queueKey = "stream_queue:editor:{$media->editor_id}";
         $queue = Cache::get($queueKey, []);
         if (!is_array($queue)) $queue = [];
-        $queue[] = $jobId;
+        if (!in_array($jobId, $queue, true)) {
+            $queue[] = $jobId;
+        }
         Cache::put($queueKey, $queue, now()->addMinutes(5));
 
         $respKey = "stream_resp:{$jobId}";
@@ -102,11 +107,26 @@ class MediaProxyController extends Controller
                 foreach ($headers as $k => $v) {
                     $r->headers->set($k, $v);
                 }
+
+                // Cleanup response key after consumption.
+                Cache::forget($respKey);
                 return $r;
             }
             usleep(200000); // 200ms
         }
 
         return response()->json(['error' => 'Stream timeout'], 504);
+    }
+
+    public function proxyDownload(Request $request, string $mediaId)
+    {
+        $r = $this->proxyStream($request, $mediaId);
+
+        // If proxyStream returned a Response with bytes, add attachment headers.
+        if ($r instanceof Response) {
+            $r->headers->set('Content-Disposition', 'attachment');
+        }
+
+        return $r;
     }
 }

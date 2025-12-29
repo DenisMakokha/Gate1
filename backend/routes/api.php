@@ -104,6 +104,7 @@ Route::middleware('auth:api')->group(function () {
 
         // Backend-proxied playback (public internet)
         Route::get('/{mediaId}/proxy-stream', [MediaProxyController::class, 'proxyStream']);
+        Route::get('/{mediaId}/proxy-download', [MediaProxyController::class, 'proxyDownload']);
     });
 
     // Issue routes
