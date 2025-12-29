@@ -53,8 +53,8 @@ export default function Settings() {
         settingsService.getGeneral(),
         settingsService.getSmtp(),
       ]);
-      setGeneralSettings(generalRes.data);
-      setSmtpSettings(smtpRes.data);
+      setGeneralSettings(generalRes);
+      setSmtpSettings(smtpRes);
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to load settings' });
     } finally {
@@ -97,7 +97,7 @@ export default function Settings() {
     setMessage({ type: '', text: '' });
     try {
       const response = await settingsService.testSmtp(testEmail);
-      setMessage({ type: 'success', text: response.data.message });
+      setMessage({ type: 'success', text: response.message });
     } catch (error) {
       setMessage({ type: 'error', text: error.message || 'SMTP test failed' });
     } finally {
