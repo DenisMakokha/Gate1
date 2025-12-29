@@ -42,6 +42,13 @@ export default function Approvals() {
     loadData();
   }, [activeEvent?.id]);
 
+  const extractArray = (res) => {
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.items)) return res.items;
+    return [];
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -49,8 +56,8 @@ export default function Approvals() {
         registrationService.getPending(),
         groupService.getAll({ event_id: activeEvent?.id }),
       ]);
-      setPendingUsers(usersRes.data.data || usersRes.data);
-      setGroups(groupsRes.data.data || groupsRes.data);
+      setPendingUsers(extractArray(usersRes));
+      setGroups(extractArray(groupsRes));
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to load data' });
     } finally {
