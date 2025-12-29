@@ -61,7 +61,7 @@ export const eventService = {
   getOne: (id) => api.get(`/events/${id}`),
   create: (data) => api.post('/events', data),
   update: (id, data) => api.put(`/events/${id}`, data),
-  activate: (id) => api.post(`/events/${id}/activate`),
+  activate: (id, force = false) => api.post(`/events/${id}/activate`, { force }),
   complete: (id) => api.post(`/events/${id}/complete`),
   getStats: (id) => api.get(`/events/${id}/stats`),
 };

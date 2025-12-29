@@ -1,13 +1,37 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { eventService } from '../services/api';
-import { Plus, Calendar, MapPin, Users, Video, CheckCircle, Clock, Eye, X, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Calendar, MapPin, Users, Video, CheckCircle, Clock, Eye, X, Trash2, AlertTriangle, Play, Zap } from 'lucide-react';
+
+// Calculate remaining time for an event
+function getRemainingTime(endDate) {
+  if (!endDate) return null;
+  const end = new Date(endDate);
+  const now = new Date();
+  const diff = end - now;
+  
+  if (diff <= 0) return { expired: true, text: 'Ended' };
+  
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  
+  if (days > 0) return { expired: false, text: `${days}d ${hours}h remaining` };
+  if (hours > 0) return { expired: false, text: `${hours}h ${minutes}m remaining` };
+  return { expired: false, text: `${minutes}m remaining` };
+}
 
 export default function Events() {
+  const { refreshActiveEvent } = useAuth();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingActivation, setPendingActivation] = useState(null);
+  const [conflictEvent, setConflictEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [activating, setActivating] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -86,12 +110,36 @@ export default function Events() {
     return new Date(dateStr).toLocaleDateString();
   };
 
-  const handleActivate = async (id) => {
+  const handleActivate = async (id, force = false) => {
+    setActivating(true);
     try {
-      await eventService.activate(id);
+      const response = await eventService.activate(id, force);
+      // Refresh the active event in context
+      if (refreshActiveEvent) {
+        await refreshActiveEvent();
+      }
       loadEvents();
+      setShowConfirmModal(false);
+      setPendingActivation(null);
+      setConflictEvent(null);
     } catch (error) {
-      console.error('Failed to activate event:', error);
+      // Handle conflict - another event is active
+      if (error?.code === 'ACTIVE_EVENT_EXISTS' || error?.response?.data?.code === 'ACTIVE_EVENT_EXISTS') {
+        const activeEvent = error?.active_event || error?.response?.data?.active_event;
+        setConflictEvent(activeEvent);
+        setPendingActivation(id);
+        setShowConfirmModal(true);
+      } else {
+        console.error('Failed to activate event:', error);
+      }
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const handleForceActivate = async () => {
+    if (pendingActivation) {
+      await handleActivate(pendingActivation, true);
     }
   };
 
@@ -106,10 +154,17 @@ export default function Events() {
 
   const statusColors = {
     draft: 'bg-gray-100 text-gray-700',
-    active: 'bg-green-100 text-green-700',
+    active: 'bg-green-100 text-green-700 ring-2 ring-green-400 ring-offset-1',
     completed: 'bg-blue-100 text-blue-700',
     archived: 'bg-gray-100 text-gray-500',
   };
+
+  // Sort events: active first, then by start date
+  const sortedEvents = [...events].sort((a, b) => {
+    if (a.status === 'active' && b.status !== 'active') return -1;
+    if (b.status === 'active' && a.status !== 'active') return 1;
+    return new Date(b.start_date) - new Date(a.start_date);
+  });
 
   if (loading) {
     return (
@@ -136,82 +191,124 @@ export default function Events() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {events.map((event) => (
-          <div key={event.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{event.name}</h3>
-                  <p className="text-sm text-gray-500">{event.code}</p>
+        {sortedEvents.map((event) => {
+          const isActive = event.status === 'active';
+          const remaining = isActive ? getRemainingTime(event.end_datetime || event.end_date) : null;
+          
+          return (
+            <div 
+              key={event.id} 
+              className={`bg-white rounded-xl shadow-sm overflow-hidden transition-all ${
+                isActive 
+                  ? 'border-2 border-green-400 ring-4 ring-green-100' 
+                  : 'border border-gray-100'
+              }`}
+            >
+              {/* Active Event Banner */}
+              {isActive && (
+                <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-white">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <span className="font-semibold text-sm">RUNNING NOW</span>
+                  </div>
+                  {remaining && !remaining.expired && (
+                    <span className="text-white/90 text-sm font-medium">
+                      {remaining.text}
+                    </span>
+                  )}
+                  {remaining?.expired && (
+                    <span className="text-yellow-200 text-sm font-medium">
+                      Past end date
+                    </span>
+                  )}
                 </div>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[event.status]}`}>
-                  {event.status}
-                </span>
+              )}
+              
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className={`font-semibold ${isActive ? 'text-green-700' : 'text-gray-900'}`}>
+                      {event.name}
+                    </h3>
+                    <p className="text-sm text-gray-500">{event.code}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[event.status]}`}>
+                    {isActive ? (
+                      <span className="flex items-center gap-1">
+                        <Zap className="w-3 h-3" />
+                        Active
+                      </span>
+                    ) : event.status}
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <span>{formatDateTime(event.start_datetime || event.start_date)}</span>
+                  </div>
+                  {(event.end_datetime || event.end_date) && (
+                    <div className={`flex items-center gap-2 ${isActive ? 'text-green-600 font-medium' : ''}`}>
+                      <Clock className="w-4 h-4" />
+                      <span>Ends: {formatDateTime(event.end_datetime || event.end_date)}</span>
+                    </div>
+                  )}
+                  {event.location && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4" />
+                      <span>{event.location}</span>
+                    </div>
+                  )}
+                  {event.auto_delete_enabled && (
+                    <div className="flex items-center gap-2 text-orange-600">
+                      <Trash2 className="w-4 h-4" />
+                      <span>Auto-delete {event.auto_delete_days_after_end || 30}d after end</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 text-sm">
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <Video className="w-4 h-4" />
+                    <span>{event.media_count || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <Users className="w-4 h-4" />
+                    <span>{event.groups_count || 0} groups</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  <span>{formatDateTime(event.start_datetime || event.start_date)}</span>
-                </div>
-                {event.end_datetime || event.end_date ? (
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    <span>Ends: {formatDateTime(event.end_datetime || event.end_date)}</span>
-                  </div>
-                ) : null}
-                {event.location && (
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    <span>{event.location}</span>
-                  </div>
+              <div className={`px-6 py-3 border-t flex gap-2 ${isActive ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+                {event.status === 'draft' && (
+                  <button
+                    onClick={() => handleActivate(event.id)}
+                    disabled={activating}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50"
+                  >
+                    <Play className="w-4 h-4" />
+                    {activating ? 'Activating...' : 'Activate Event'}
+                  </button>
                 )}
-                {event.auto_delete_enabled && (
-                  <div className="flex items-center gap-2 text-orange-600">
-                    <Trash2 className="w-4 h-4" />
-                    <span>Auto-delete {event.auto_delete_days_after_end || 30}d after end</span>
-                  </div>
+                {event.status === 'active' && (
+                  <button
+                    onClick={() => handleComplete(event.id)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Mark Complete
+                  </button>
                 )}
-              </div>
-
-              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 text-sm">
-                <div className="flex items-center gap-1 text-gray-500">
-                  <Video className="w-4 h-4" />
-                  <span>{event.media_count || 0}</span>
-                </div>
-                <div className="flex items-center gap-1 text-gray-500">
-                  <Users className="w-4 h-4" />
-                  <span>{event.groups_count || 0} groups</span>
-                </div>
+                <button
+                  onClick={() => { setSelectedEvent(event); setShowDetailModal(true); }}
+                  className="flex-1 text-center py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded"
+                >
+                  View Details
+                </button>
               </div>
             </div>
-
-            <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex gap-2">
-              {event.status === 'draft' && (
-                <button
-                  onClick={() => handleActivate(event.id)}
-                  className="flex-1 text-center py-2 text-sm font-medium text-green-700 hover:bg-green-100 rounded"
-                >
-                  Activate
-                </button>
-              )}
-              {event.status === 'active' && (
-                <button
-                  onClick={() => handleComplete(event.id)}
-                  className="flex-1 text-center py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 rounded"
-                >
-                  Complete
-                </button>
-              )}
-              <button
-                onClick={() => { setSelectedEvent(event); setShowDetailModal(true); }}
-                className="flex-1 text-center py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded"
-              >
-                View Details
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Create Event Modal */}
@@ -434,6 +531,62 @@ export default function Events() {
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Activation Conflict Modal */}
+      {showConfirmModal && conflictEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 m-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Another Event is Active</h2>
+                <p className="text-sm text-gray-500">Only one event can be active at a time</p>
+              </div>
+            </div>
+            
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="font-medium text-green-700">Currently Running</span>
+              </div>
+              <p className="font-semibold text-gray-900">{conflictEvent.name}</p>
+              <p className="text-sm text-gray-500">{conflictEvent.code}</p>
+              {conflictEvent.end_date && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Ends: {formatDateTime(conflictEvent.end_date)}
+                </p>
+              )}
+            </div>
+
+            <p className="text-sm text-gray-600 mb-6">
+              Activating a new event will automatically mark <strong>{conflictEvent.name}</strong> as completed. 
+              Do you want to proceed?
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setPendingActivation(null);
+                  setConflictEvent(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleForceActivate}
+                disabled={activating}
+                className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+              >
+                {activating ? 'Switching...' : 'Switch Event'}
               </button>
             </div>
           </div>
