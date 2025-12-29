@@ -535,7 +535,7 @@ class UserController extends Controller
                 'group_id' => $request->group_id,
                 'max_uses' => $request->get('max_uses', 100),
                 'expires_at' => $expiresAt->toIso8601String(),
-                'link' => config('app.frontend_url', 'http://localhost:5173') . '/register?invite=' . $token,
+                'link' => config('app.frontend_url', 'http://localhost:5173') . '/register?token=' . $token,
             ],
         ], 201);
     }
@@ -583,7 +583,7 @@ class UserController extends Controller
                 'remaining' => $inv->max_uses - $inv->uses_count,
                 'created_by' => $inv->created_by_name,
                 'expires_at' => $inv->expires_at,
-                'link' => config('app.frontend_url', 'http://localhost:5173') . '/register?invite=' . $inv->token,
+                'link' => config('app.frontend_url', 'http://localhost:5173') . '/register?token=' . $inv->token,
             ]),
         ]);
     }

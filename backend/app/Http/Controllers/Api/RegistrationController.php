@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\EmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -83,41 +84,119 @@ class RegistrationController extends Controller
     {
         $request->validate([
             'token' => 'required|string',
+            'email' => 'nullable|email',
             'name' => 'required|string|max:255',
             'password' => 'required|string|min:8|confirmed',
             'phone' => 'nullable|string|max:20',
         ]);
 
-        $user = User::where('invitation_token', $request->token)
+        // 1) Email-based invitation (stored on users table)
+        $userInvite = User::where('invitation_token', $request->token)
             ->whereNull('password')
             ->where('invitation_expires_at', '>', now())
             ->first();
 
-        if (!$user) {
+        if ($userInvite) {
+            $userInvite->update([
+                'name' => $request->name,
+                'password' => Hash::make($request->password),
+                'phone' => $request->phone,
+                'is_active' => true,
+                'approval_status' => 'approved',
+                'approved_at' => now(),
+                'invitation_token' => null,
+                'invitation_expires_at' => null,
+            ]);
+
+            // Assign editor role
+            $editorRole = Role::where('slug', 'editor')->first();
+            if ($editorRole && !$userInvite->roles()->where('role_id', $editorRole->id)->exists()) {
+                $userInvite->roles()->attach($editorRole->id);
+            }
+
+            AuditLog::log('user.register_via_invitation', null, 'User', $userInvite->id, null, [
+                'invited_by' => $userInvite->invited_by,
+                'source' => 'user.invitation_token',
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Registration completed successfully. You can now login.',
+            ]);
+        }
+
+        // 2) Role/group invitation links (stored in invitations table)
+        $invitation = DB::table('invitations')
+            ->where('token', $request->token)
+            ->where('expires_at', '>', now())
+            ->whereRaw('uses_count < max_uses')
+            ->first();
+
+        if (!$invitation) {
             return response()->json([
                 'error' => 'Invalid or expired invitation token.',
             ], 400);
         }
 
-        $user->update([
-            'name' => $request->name,
-            'password' => Hash::make($request->password),
-            'phone' => $request->phone,
-            'is_active' => true,
-            'approval_status' => 'approved',
-            'approved_at' => now(),
-            'invitation_token' => null,
-            'invitation_expires_at' => null,
-        ]);
-
-        // Assign editor role
-        $editorRole = Role::where('slug', 'editor')->first();
-        if ($editorRole && !$user->roles()->where('role_id', $editorRole->id)->exists()) {
-            $user->roles()->attach($editorRole->id);
+        if (!$request->filled('email')) {
+            return response()->json([
+                'error' => 'Email is required for this invitation link.',
+            ], 422);
         }
 
-        AuditLog::log('user.register_via_invitation', null, 'User', $user->id, null, [
-            'invited_by' => $user->invited_by,
+        $request->validate([
+            'email' => 'required|email|unique:users,email',
+        ]);
+
+        $role = Role::where('slug', $invitation->role_slug)->first();
+        if (!$role) {
+            return response()->json([
+                'error' => 'Invitation role is invalid.',
+            ], 400);
+        }
+
+        $createdUser = null;
+
+        DB::transaction(function () use ($request, $invitation, $role, &$createdUser) {
+            // Lock invitation row to avoid over-using tokens
+            $locked = DB::table('invitations')
+                ->where('id', $invitation->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$locked || $locked->expires_at <= now() || $locked->uses_count >= $locked->max_uses) {
+                throw new \RuntimeException('Invitation is no longer valid.');
+            }
+
+            $createdUser = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'phone' => $request->phone,
+                'is_active' => true,
+                'approval_status' => 'approved',
+                'approved_at' => now(),
+            ]);
+
+            $createdUser->roles()->attach($role->id);
+
+            if (!empty($locked->group_id)) {
+                $createdUser->groups()->attach($locked->group_id);
+            }
+
+            DB::table('invitations')
+                ->where('id', $locked->id)
+                ->update([
+                    'uses_count' => DB::raw('uses_count + 1'),
+                    'updated_at' => now(),
+                ]);
+        });
+
+        AuditLog::log('user.register_via_invitation', null, 'User', $createdUser->id, null, [
+            'source' => 'invitations_table',
+            'invitation_id' => $invitation->id,
+            'role' => $invitation->role_slug,
+            'group_id' => $invitation->group_id,
         ]);
 
         return response()->json([
@@ -359,11 +438,28 @@ class RegistrationController extends Controller
 
     public function checkInvitation(string $token): JsonResponse
     {
+        // 1) Email-based invitation (stored on users table)
         $user = User::where('invitation_token', $token)
             ->where('invitation_expires_at', '>', now())
             ->first();
 
-        if (!$user) {
+        if ($user) {
+            return response()->json([
+                'valid' => true,
+                'type' => 'user',
+                'email' => $user->email,
+                'groups' => $user->groups->map(fn($g) => ['id' => $g->id, 'name' => $g->name]),
+            ]);
+        }
+
+        // 2) Role/group invitation links (stored in invitations table)
+        $invitation = DB::table('invitations')
+            ->where('token', $token)
+            ->where('expires_at', '>', now())
+            ->whereRaw('uses_count < max_uses')
+            ->first();
+
+        if (!$invitation) {
             return response()->json([
                 'valid' => false,
                 'message' => 'Invalid or expired invitation token',
@@ -372,8 +468,13 @@ class RegistrationController extends Controller
 
         return response()->json([
             'valid' => true,
-            'email' => $user->email,
-            'groups' => $user->groups->map(fn($g) => ['id' => $g->id, 'name' => $g->name]),
+            'type' => 'invitation',
+            'email' => null,
+            'role' => $invitation->role_slug,
+            'group_id' => $invitation->group_id,
+            'max_uses' => $invitation->max_uses,
+            'uses_count' => $invitation->uses_count,
+            'expires_at' => $invitation->expires_at,
         ]);
     }
 }

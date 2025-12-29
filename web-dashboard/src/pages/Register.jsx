@@ -17,7 +17,7 @@ import {
 export default function Register() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const invitationToken = searchParams.get('token');
+  const invitationToken = searchParams.get('token') || searchParams.get('invite');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -44,8 +44,11 @@ export default function Register() {
   const checkInvitation = async () => {
     try {
       const response = await registrationService.checkInvitation(invitationToken);
-      setInvitation(response.data);
-      setFormData(prev => ({ ...prev, email: response.data.email }));
+      setInvitation(response);
+      // Some invite types pre-fill email (user.invitation_token), others require user to enter email
+      if (response?.email) {
+        setFormData(prev => ({ ...prev, email: response.email }));
+      }
     } catch (err) {
       setError('Invalid or expired invitation link');
     } finally {
@@ -183,7 +186,7 @@ export default function Register() {
                   className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="you@example.com"
                   required
-                  disabled={!!invitationToken}
+                  disabled={!!invitationToken && !!invitation?.email}
                 />
               </div>
             </div>
