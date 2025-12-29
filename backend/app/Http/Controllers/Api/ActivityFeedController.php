@@ -17,7 +17,7 @@ class ActivityFeedController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -39,7 +39,7 @@ class ActivityFeedController extends Controller
         }
 
         // Group leaders only see their groups' activities
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $query->where(function ($q) use ($groupIds, $user) {
                 $q->whereIn('group_id', $groupIds)
@@ -80,7 +80,7 @@ class ActivityFeedController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -93,7 +93,7 @@ class ActivityFeedController extends Controller
             $query->where('event_id', $eventId);
         }
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $query->where(function ($q) use ($groupIds, $user) {
                 $q->whereIn('group_id', $groupIds)
@@ -147,7 +147,7 @@ class ActivityFeedController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -156,7 +156,7 @@ class ActivityFeedController extends Controller
 
         $baseQuery = ActivityFeed::when($eventId, fn($q) => $q->where('event_id', $eventId));
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $baseQuery->where(function ($q) use ($groupIds, $user) {
                 $q->whereIn('group_id', $groupIds)

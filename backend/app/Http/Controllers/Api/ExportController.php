@@ -232,7 +232,7 @@ class ExportController extends Controller
     public function dailySummary(Request $request): JsonResponse
     {
         $user = auth('api')->user();
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -240,7 +240,7 @@ class ExportController extends Controller
         $eventId = $request->get('event_id');
 
         // Determine scope
-        if ($user->isAdmin()) {
+        if ($user->hasOperationalAccess()) {
             $editorIds = User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))->pluck('id');
             $groupIds = Group::pluck('id');
         } else {
@@ -356,7 +356,7 @@ class ExportController extends Controller
     public function eventReport(Request $request, int $eventId): JsonResponse
     {
         $user = auth('api')->user();
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

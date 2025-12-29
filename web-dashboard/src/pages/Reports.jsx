@@ -22,7 +22,7 @@ const reportTypes = [
     name: 'Daily Summary',
     description: 'Overview of daily operations including media count, issues, and editor activity',
     icon: Calendar,
-    formats: ['pdf', 'xlsx'],
+    formats: ['json'],
     category: 'operations',
   },
   {
@@ -30,7 +30,7 @@ const reportTypes = [
     name: 'Event Report',
     description: 'Complete report for a specific event including all statistics and media',
     icon: BarChart3,
-    formats: ['pdf', 'xlsx'],
+    formats: ['json'],
     category: 'operations',
   },
   {
@@ -38,7 +38,7 @@ const reportTypes = [
     name: 'Media Inventory',
     description: 'Export list of all media files with metadata and status',
     icon: Video,
-    formats: ['xlsx', 'csv'],
+    formats: ['csv'],
     category: 'media',
   },
   {
@@ -46,7 +46,7 @@ const reportTypes = [
     name: 'Issues Report',
     description: 'List of all issues with resolution status and timeline',
     icon: AlertTriangle,
-    formats: ['pdf', 'xlsx'],
+    formats: ['csv'],
     category: 'quality',
   },
   {
@@ -54,7 +54,7 @@ const reportTypes = [
     name: 'Backup Status',
     description: 'Backup coverage and verification report by disk and event',
     icon: HardDrive,
-    formats: ['pdf', 'xlsx'],
+    formats: ['csv'],
     category: 'storage',
   },
   {
@@ -62,7 +62,7 @@ const reportTypes = [
     name: 'Editor Performance',
     description: 'Performance metrics and productivity stats for editors',
     icon: Users,
-    formats: ['pdf', 'xlsx'],
+    formats: ['csv'],
     category: 'team',
   },
   {
@@ -70,7 +70,7 @@ const reportTypes = [
     name: 'Healing Cases',
     description: 'Export healing case records with patient info and status',
     icon: FileText,
-    formats: ['xlsx', 'csv'],
+    formats: ['csv'],
     category: 'media',
   },
   {
@@ -78,7 +78,7 @@ const reportTypes = [
     name: 'Audit Trail',
     description: 'System audit logs for compliance and tracking',
     icon: FileText,
-    formats: ['xlsx', 'csv'],
+    formats: ['csv'],
     category: 'admin',
   },
 ];
@@ -264,10 +264,10 @@ export default function Reports() {
                               onClick={() => setSelectedReport({ ...report, format })}
                               className="flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
                             >
-                              {format === 'pdf' ? (
-                                <File className="w-4 h-4 text-red-500" />
-                              ) : (
+                              {format === 'csv' ? (
                                 <FileSpreadsheet className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <File className="w-4 h-4 text-gray-500" />
                               )}
                               {format.toUpperCase()}
                             </button>
@@ -297,10 +297,10 @@ export default function Reports() {
                 recentReports.map((report) => (
                   <div key={report.id} className="p-4 hover:bg-gray-50">
                     <div className="flex items-center gap-3">
-                      {report.type === 'pdf' ? (
-                        <File className="w-8 h-8 text-red-500" />
-                      ) : (
+                      {report.type === 'csv' ? (
                         <FileSpreadsheet className="w-8 h-8 text-green-500" />
+                      ) : (
+                        <File className="w-8 h-8 text-gray-500" />
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
