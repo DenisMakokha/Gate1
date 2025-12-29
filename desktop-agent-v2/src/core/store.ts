@@ -19,6 +19,8 @@ export type Gate1LocalState = {
   agentConfig?: unknown;
   activeSdSession?: unknown;
   eventPolicyCipher?: string;
+  lastKnownActiveEventId?: number | null;
+  lastKnownActiveEventAtIso?: string | null;
   lastBackupSummary?: unknown;
 };
 

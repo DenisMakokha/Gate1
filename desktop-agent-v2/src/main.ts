@@ -1193,12 +1193,34 @@ async function tryStartServerSession(snapshot?: SnapshotResult): Promise<void> {
     if (ping.online) {
       const activeEvent = await api.getActiveEvent();
       eventId = activeEvent?.id ?? null;
+
+      // Cache last known active event for offline queuing.
+      store.set('lastKnownActiveEventId', eventId);
+      store.set('lastKnownActiveEventAtIso', new Date().toISOString());
     }
   } catch {
     eventId = null;
   }
 
-  if (!eventId) return;
+  if (!eventId) {
+    // If offline, attempt to use last known active event.
+    if (!ping.online) {
+      const cachedId = store.get('lastKnownActiveEventId') ?? null;
+      eventId = typeof cachedId === 'number' ? cachedId : null;
+    }
+  }
+
+  if (!eventId) {
+    // Active event is required for server session creation.
+    // Surface this explicitly instead of silently failing.
+    emitAttentionRequired('NO_ACTIVE_EVENT', {
+      message: 'No active event is configured. Activate an event in the dashboard to enable server sessions.',
+      online: ping.online,
+      atIso: new Date().toISOString(),
+    });
+    audit.warn('session.server_start_blocked_no_active_event', { online: ping.online });
+    return;
+  }
 
   // Cache event policy (non-blocking)
   void refreshEventPolicy(eventId);
@@ -2135,6 +2157,8 @@ function registerIpc() {
       lastQueueDrainAtIso,
       lastConfigRefreshAtIso,
       eventPolicy: cachedEventPolicy,
+      lastKnownActiveEventId: store.get('lastKnownActiveEventId') ?? null,
+      lastKnownActiveEventAtIso: store.get('lastKnownActiveEventAtIso') ?? null,
       mountedSds: sdDetector?.getMounted?.() ?? [],
       watchedFolders: cfg?.watchedFolders ?? [],
       backupEnabled: cfg?.backupEnabled ?? false,
