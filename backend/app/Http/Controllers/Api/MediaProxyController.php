@@ -48,6 +48,8 @@ class MediaProxyController extends Controller
             return response()->json(['error' => 'Editor agent offline'], 404);
         }
 
+        $cache = Cache::store('streaming');
+
         $range = $request->header('Range');
         $start = 0;
         $end = null;
@@ -82,21 +84,21 @@ class MediaProxyController extends Controller
             'expires_at' => now()->addSeconds(20)->toIso8601String(),
         ];
 
-        Cache::put("stream_job:{$jobId}", $job, now()->addSeconds(20));
+        $cache->put("stream_job:{$jobId}", $job, now()->addSeconds(20));
 
         $queueKey = "stream_queue:editor:{$media->editor_id}";
-        $queue = Cache::get($queueKey, []);
+        $queue = $cache->get($queueKey, []);
         if (!is_array($queue)) $queue = [];
         if (!in_array($jobId, $queue, true)) {
             $queue[] = $jobId;
         }
-        Cache::put($queueKey, $queue, now()->addMinutes(5));
+        $cache->put($queueKey, $queue, now()->addMinutes(5));
 
         $respKey = "stream_resp:{$jobId}";
         $deadline = microtime(true) + 15.0;
 
         while (microtime(true) < $deadline) {
-            $resp = Cache::get($respKey);
+            $resp = $cache->get($respKey);
             if ($resp && is_array($resp)) {
                 $status = (int) ($resp['status'] ?? 500);
                 $headers = is_array($resp['headers'] ?? null) ? $resp['headers'] : [];
@@ -109,7 +111,7 @@ class MediaProxyController extends Controller
                 }
 
                 // Cleanup response key after consumption.
-                Cache::forget($respKey);
+                $cache->forget($respKey);
                 return $r;
             }
             usleep(200000); // 200ms

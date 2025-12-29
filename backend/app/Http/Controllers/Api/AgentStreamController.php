@@ -30,8 +30,10 @@ class AgentStreamController extends Controller
             return response()->json(['error' => 'Agent not found'], 404);
         }
 
+        $cache = Cache::store('streaming');
+
         $queueKey = "stream_queue:editor:{$user->id}";
-        $queue = Cache::get($queueKey, []);
+        $queue = $cache->get($queueKey, []);
         if (!is_array($queue) || count($queue) === 0) {
             return response()->json(['job' => null]);
         }
@@ -40,10 +42,10 @@ class AgentStreamController extends Controller
         while (count($queue) > 0) {
             $jobId = array_shift($queue);
             $jobKey = "stream_job:{$jobId}";
-            $job = Cache::get($jobKey);
+            $job = $cache->get($jobKey);
 
             // Persist trimmed queue.
-            Cache::put($queueKey, $queue, now()->addMinutes(5));
+            $cache->put($queueKey, $queue, now()->addMinutes(5));
 
             if (!$job || !is_array($job)) {
                 continue;
@@ -57,7 +59,7 @@ class AgentStreamController extends Controller
             return response()->json(['job' => $job]);
         }
 
-        Cache::put($queueKey, $queue, now()->addMinutes(5));
+        $cache->put($queueKey, $queue, now()->addMinutes(5));
         return response()->json(['job' => null]);
     }
 
@@ -74,8 +76,10 @@ class AgentStreamController extends Controller
         $user = auth('api')->user();
         $jobId = $request->job_id;
 
+        $cache = Cache::store('streaming');
+
         $jobKey = "stream_job:{$jobId}";
-        $job = Cache::get($jobKey);
+        $job = $cache->get($jobKey);
         if (!$job || !is_array($job)) {
             return response()->json(['ok' => true]);
         }
@@ -85,7 +89,7 @@ class AgentStreamController extends Controller
         }
 
         $respKey = "stream_resp:{$jobId}";
-        Cache::put($respKey, [
+        $cache->put($respKey, [
             'job_id' => $jobId,
             'status' => (int) $request->status,
             'headers' => $request->headers ?? [],
@@ -95,7 +99,7 @@ class AgentStreamController extends Controller
         ], now()->addSeconds(30));
 
         // Best-effort cleanup: job details not needed after a response is recorded.
-        Cache::forget($jobKey);
+        $cache->forget($jobKey);
 
         return response()->json(['ok' => true]);
     }

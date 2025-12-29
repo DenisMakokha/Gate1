@@ -27,6 +27,13 @@ return [
             'connection' => 'cache',
             'lock_connection' => 'default',
         ],
+
+        'streaming' => [
+            'driver' => env('STREAM_CACHE_DRIVER', 'redis'),
+            'connection' => env('STREAM_CACHE_REDIS_CONNECTION', 'cache'),
+            'lock_connection' => 'default',
+            'prefix' => env('STREAM_CACHE_PREFIX', env('CACHE_PREFIX', 'gate1_cache_') . 'stream_'),
+        ],
     ],
 
     'prefix' => env('CACHE_PREFIX', 'gate1_cache_'),
