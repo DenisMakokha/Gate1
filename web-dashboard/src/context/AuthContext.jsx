@@ -64,12 +64,26 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const getRoleNames = () => {
+    const roles = user?.roles;
+    if (!Array.isArray(roles)) return [];
+    return roles
+      .map((r) => {
+        if (!r) return null;
+        if (typeof r === 'string') return r;
+        if (typeof r === 'object') return r.name || r.slug || r.code || null;
+        return null;
+      })
+      .filter(Boolean);
+  };
+
   const hasRole = (role) => {
-    return user?.roles?.includes(role);
+    return getRoleNames().includes(role);
   };
 
   const hasAnyRole = (roles) => {
-    return roles.some(role => user?.roles?.includes(role));
+    const roleNames = getRoleNames();
+    return roles.some((role) => roleNames.includes(role));
   };
 
   const isAdmin = () => hasRole('admin');
