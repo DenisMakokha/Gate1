@@ -333,6 +333,10 @@ class DashboardController extends Controller
     {
         $user = auth('api')->user();
 
+        if (!$user->isEditor() && !$user->hasOperationalAccess()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         return response()->json([
             'today' => [
                 'files_indexed' => Media::where('editor_id', $user->id)

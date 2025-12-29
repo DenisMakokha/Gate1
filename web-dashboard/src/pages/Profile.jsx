@@ -103,14 +103,18 @@ export default function Profile() {
             <h2 className="text-xl font-semibold text-gray-900">{user?.name}</h2>
             <p className="text-gray-500">{user?.email}</p>
             <div className="flex gap-2 mt-2">
-              {user?.roles?.map((role) => (
+              {user?.roles?.map((role) => {
+                const roleName = typeof role === 'string' ? role : (role?.slug || role?.name);
+                if (!roleName) return null;
+                return (
                 <span
-                  key={role}
+                  key={roleName}
                   className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
                 >
-                  {role}
+                  {roleName}
                 </span>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
