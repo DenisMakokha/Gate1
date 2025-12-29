@@ -434,6 +434,106 @@ export default function Dashboard() {
           </button>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Link
+            to="/events"
+            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">Events</div>
+                <div className="text-xs text-gray-500">Activate / switch active event</div>
+              </div>
+              <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                <Calendar className="w-5 h-5" />
+              </div>
+            </div>
+          </Link>
+          <Link
+            to="/issues"
+            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">Issues</div>
+                <div className="text-xs text-gray-500">Triage and assign</div>
+              </div>
+              <div className="p-2 rounded-lg bg-red-50 text-red-600">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+            </div>
+          </Link>
+          <Link
+            to="/users"
+            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">Users</div>
+                <div className="text-xs text-gray-500">Invite and manage access</div>
+              </div>
+              <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:col-span-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">Operational Status</div>
+                <div className="text-xs text-gray-500">Fast read on risk and throughput</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`px-2 py-1 rounded text-xs font-medium ${
+                  (data.overview.critical_issues || 0) > 0 ? 'bg-red-100 text-red-700' :
+                  (data.overview.open_issues || 0) > 5 ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {(data.overview.critical_issues || 0) > 0 ? 'Critical' : (data.overview.open_issues || 0) > 5 ? 'Attention' : 'Stable'}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Open Issues</div>
+                <div className="text-xl font-bold text-gray-900">{data.overview.open_issues || 0}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Critical</div>
+                <div className="text-xl font-bold text-gray-900">{data.overview.critical_issues || 0}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Pending Backups</div>
+                <div className="text-xl font-bold text-gray-900">{data.overview.pending_backups || 0}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Active Sessions</div>
+                <div className="text-xl font-bold text-gray-900">{data.overview.active_sessions || 0}</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">Editors Online</div>
+                <div className="text-xs text-gray-500">Last 2 minutes</div>
+              </div>
+              <Wifi className="w-4 h-4 text-green-600" />
+            </div>
+            <div className="mt-4 flex items-baseline gap-2">
+              <div className="text-3xl font-bold text-gray-900">{data.overview.online_agents || 0}</div>
+              <div className="text-sm text-gray-500">/ {data.overview.total_editors || 0}</div>
+            </div>
+            <div className="mt-3 rounded-lg bg-gray-50 p-3">
+              <div className="text-xs text-gray-500">Backup Coverage</div>
+              <div className="text-xl font-bold text-gray-900">{data.overview.backup_coverage || 0}%</div>
+            </div>
+          </div>
+        </div>
+
         {/* Primary KPIs - Signals per blueprint */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <StatCard
@@ -476,18 +576,6 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white rounded-xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-500">Editors Online</span>
-              <Wifi className="w-4 h-4 text-green-500" />
-            </div>
-            <div className="text-2xl font-bold text-gray-900">
-              {data.overview.online_agents || 0}
-              <span className="text-sm font-normal text-gray-500 ml-2">
-                / {data.overview.total_editors || 0}
-              </span>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-500">Media Today</span>
               <Video className="w-4 h-4 text-blue-500" />
             </div>
@@ -498,11 +586,22 @@ export default function Dashboard() {
           </div>
           <div className="bg-white rounded-xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-500">Backup Coverage</span>
-              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span className="text-sm text-gray-500">Total Media</span>
+              <TrendingUp className="w-4 h-4 text-purple-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900">
-              {data.overview.backup_coverage || 0}%
+              {data.overview.total_media || 0}
+              <span className="text-sm font-normal text-gray-500 ml-2">files indexed</span>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-500">Cameras Needing Attention</span>
+              <Camera className="w-4 h-4 text-red-500" />
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {data.overview.cameras_attention || 0}
+              <span className="text-sm font-normal text-gray-500 ml-2">cameras</span>
             </div>
           </div>
         </div>
