@@ -39,7 +39,7 @@ import {
 import { ConnectionStatus, LiveStatus } from './StatusPills';
 
 export default function Layout({ children }) {
-  const { user, logout, isAdmin, isGroupLeader, isQA, isBackup } = useAuth();
+  const { user, logout, hasAnyRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -74,9 +74,9 @@ export default function Layout({ children }) {
       id: 'overview',
       name: 'Overview',
       icon: LayoutDashboard,
-      roles: ['admin', 'team-lead', 'group-leader', 'qa', 'backup', 'editor'],
+      roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead', 'backup', 'backup-lead', 'editor'],
       items: [
-        { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['admin', 'team-lead', 'group-leader', 'qa', 'backup', 'editor'] },
+        { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead', 'backup', 'backup-lead', 'editor'] },
         { name: 'Live Operations', href: '/live-operations', icon: Activity, roles: ['admin', 'team-lead', 'group-leader'] },
         { name: 'Analytics', href: '/analytics-dashboard', icon: BarChart3, roles: ['admin', 'team-lead', 'group-leader'] },
       ]
@@ -97,12 +97,12 @@ export default function Layout({ children }) {
       id: 'media',
       name: 'Media',
       icon: Video,
-      roles: ['admin', 'team-lead', 'group-leader', 'qa'],
+      roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead'],
       items: [
-        { name: 'Search & Playback', href: '/search', icon: Search, roles: ['admin', 'team-lead', 'group-leader', 'qa'] },
+        { name: 'Search & Playback', href: '/search', icon: Search, roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead'] },
         { name: 'Media Library', href: '/media', icon: Video, roles: ['admin', 'team-lead'] },
-        { name: 'Quality Control', href: '/quality-control', icon: CheckCircle, roles: ['admin', 'team-lead', 'qa', 'group-leader'] },
-        { name: 'Issues', href: '/issues', icon: AlertTriangle, roles: ['admin', 'team-lead', 'group-leader', 'qa'] },
+        { name: 'Quality Control', href: '/quality-control', icon: CheckCircle, roles: ['admin', 'team-lead', 'qa', 'qa-lead', 'group-leader'] },
+        { name: 'Issues', href: '/issues', icon: AlertTriangle, roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead'] },
         { name: 'Healing Cases', href: '/healing-cases', icon: Heart, roles: ['admin', 'team-lead', 'group-leader'] },
       ]
     },
@@ -110,10 +110,10 @@ export default function Layout({ children }) {
       id: 'storage',
       name: 'Storage',
       icon: Database,
-      roles: ['admin', 'team-lead', 'backup'],
+      roles: ['admin', 'team-lead', 'backup', 'backup-lead'],
       items: [
-        { name: 'Backups', href: '/backups', icon: HardDrive, roles: ['admin', 'team-lead', 'backup'] },
-        { name: 'Storage Forecast', href: '/storage-forecast', icon: BarChart3, roles: ['admin', 'team-lead', 'backup'] },
+        { name: 'Backups', href: '/backups', icon: HardDrive, roles: ['admin', 'team-lead', 'backup', 'backup-lead'] },
+        { name: 'Storage Forecast', href: '/storage-forecast', icon: BarChart3, roles: ['admin', 'team-lead', 'backup', 'backup-lead'] },
         { name: 'Data Protection', href: '/data-protection', icon: Shield, roles: ['admin', 'team-lead'] },
       ]
     },
@@ -144,12 +144,12 @@ export default function Layout({ children }) {
   ];
 
   const filteredMenu = menuStructure
-    .filter(section => section.roles.some(role => user?.roles?.includes(role)))
-    .map(section => ({
+    .filter((section) => hasAnyRole(section.roles))
+    .map((section) => ({
       ...section,
-      items: section.items.filter(item => item.roles.some(role => user?.roles?.includes(role)))
+      items: section.items.filter((item) => hasAnyRole(item.roles)),
     }))
-    .filter(section => section.items.length > 0);
+    .filter((section) => section.items.length > 0);
 
   return (
     <div className="min-h-screen bg-gray-50">

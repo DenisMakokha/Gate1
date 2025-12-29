@@ -118,7 +118,7 @@ function App() {
           
           {/* Media & Quality */}
           <Route path="/search" element={
-            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead']}>
               <Search />
             </PrivateRoute>
           } />
@@ -128,12 +128,12 @@ function App() {
             </PrivateRoute>
           } />
           <Route path="/quality-control" element={
-            <PrivateRoute roles={['admin', 'team-lead', 'qa', 'group-leader']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'qa', 'qa-lead', 'group-leader']}>
               <QualityControl />
             </PrivateRoute>
           } />
           <Route path="/issues" element={
-            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead']}>
               <Issues />
             </PrivateRoute>
           } />
@@ -145,12 +145,12 @@ function App() {
           
           {/* Storage */}
           <Route path="/backups" element={
-            <PrivateRoute roles={['admin', 'team-lead', 'backup']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'backup', 'backup-lead']}>
               <Backups />
             </PrivateRoute>
           } />
           <Route path="/storage-forecast" element={
-            <PrivateRoute roles={['admin', 'team-lead', 'backup']}>
+            <PrivateRoute roles={['admin', 'team-lead', 'backup', 'backup-lead']}>
               <StorageForecast />
             </PrivateRoute>
           } />
