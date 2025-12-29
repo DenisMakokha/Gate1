@@ -433,11 +433,17 @@ class BackupController extends Controller
      */
     public function pendingByEditor(Request $request): JsonResponse
     {
+        $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $eventId = $request->input('event_id');
 
         // Get all editors with pending clips
-        $editors = \App\Models\User::whereHas('roles', fn($q) => $q->where('name', 'editor'))
-            ->with(['group'])
+        $editors = \App\Models\User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))
+            ->with(['groups'])
             ->get()
             ->map(function ($editor) use ($eventId) {
                 // Count renamed but not backed up clips
@@ -447,7 +453,7 @@ class BackupController extends Controller
                     ->when($eventId, fn($q) => $q->where('event_id', $eventId));
 
                 $pendingClips = $pendingQuery->count();
-                $pendingSize = $pendingQuery->sum('file_size');
+                $pendingSize = $pendingQuery->sum('size_bytes');
 
                 // Get last backup disk used by this editor
                 $lastBackup = Backup::whereHas('media', fn($q) => $q->where('editor_id', $editor->id))
@@ -458,7 +464,10 @@ class BackupController extends Controller
                 return [
                     'id' => $editor->id,
                     'name' => $editor->name,
-                    'group_code' => $editor->group?->group_code ?? 'N/A',
+                    'groups' => $editor->groups->map(fn($g) => [
+                        'id' => $g->id,
+                        'group_code' => $g->group_code,
+                    ]),
                     'pending_clips' => $pendingClips,
                     'pending_size' => $pendingSize,
                     'pending_size_formatted' => $this->formatBytes($pendingSize),
@@ -485,6 +494,12 @@ class BackupController extends Controller
      */
     public function pendingByGroup(Request $request): JsonResponse
     {
+        $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $eventId = $request->input('event_id');
 
         $groups = \App\Models\Group::with(['media' => function ($q) use ($eventId) {
@@ -494,7 +509,7 @@ class BackupController extends Controller
             $totalRenamed = $group->media->count();
             $backedUp = $group->media->filter(fn($m) => $m->backups()->exists())->count();
             $pending = $totalRenamed - $backedUp;
-            $pendingSize = $group->media->filter(fn($m) => !$m->backups()->exists())->sum('file_size');
+            $pendingSize = $group->media->filter(fn($m) => !$m->backups()->exists())->sum('size_bytes');
 
             return [
                 'id' => $group->id,
@@ -523,8 +538,14 @@ class BackupController extends Controller
      */
     public function editorDiskAssignments(Request $request): JsonResponse
     {
+        $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         // Get all editors with their last used backup disk
-        $assignments = \App\Models\User::whereHas('roles', fn($q) => $q->where('name', 'editor'))
+        $assignments = \App\Models\User::whereHas('roles', fn($q) => $q->where('slug', 'editor'))
             ->get()
             ->map(function ($editor) {
                 $lastBackup = Backup::whereHas('media', fn($q) => $q->where('editor_id', $editor->id))
@@ -564,6 +585,12 @@ class BackupController extends Controller
      */
     public function teamPendingTotal(Request $request): JsonResponse
     {
+        $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $eventId = $request->input('event_id');
 
         // Total renamed clips not backed up
@@ -572,7 +599,7 @@ class BackupController extends Controller
             ->when($eventId, fn($q) => $q->where('event_id', $eventId));
 
         $pendingClips = $pendingQuery->count();
-        $pendingSize = $pendingQuery->sum('file_size');
+        $pendingSize = $pendingQuery->sum('size_bytes');
 
         // Total renamed clips
         $totalRenamed = Media::where('status', 'renamed')
