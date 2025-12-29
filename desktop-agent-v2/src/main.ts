@@ -443,10 +443,88 @@ let warnedRenameFiles: Set<string> = new Set();
 
 type CopyState = {
   sessionId: string;
-  pendingByKey: Map<string, { name: string; sizeBytes: number }>; // key=name|size
-  hashByKey: Map<string, string>; // key=name|size -> snapshot quickHash
+  pendingByKey: Map<string, { name: string; sizeBytes: number }>;
+  hashByKey: Map<string, string>;
   copiedKeys: Set<string>;
 };
+
+function inferMediaTypeFromFilename(filename: string): 'before' | 'after' {
+  const n = filename.toLowerCase();
+  if (n.includes('after')) return 'after';
+  return 'before';
+}
+
+function parseFilenameMetadata(filename: string): { full_name?: string; age?: number; condition?: string; region?: string } {
+  const base = path.basename(filename, path.extname(filename));
+  const parts = base.split('_').filter(Boolean);
+
+  // Expected: FULLNAME_AGE_CONDITION_REGION (per agent config)
+  if (parts.length < 4) return {};
+
+  const [fullName, ageRaw, condition, region] = parts;
+  const age = Number(ageRaw);
+
+  return {
+    full_name: fullName ? String(fullName) : undefined,
+    age: Number.isFinite(age) ? age : undefined,
+    condition: condition ? String(condition) : undefined,
+    region: region ? String(region) : undefined,
+  };
+}
+
+async function trySyncMediaOnCopy(params: {
+  sessionId: string;
+  filename: string;
+  fullPath: string;
+  sizeBytes: number;
+  quickHash?: string | null;
+  createdAtIso?: string | null;
+}): Promise<void> {
+  const agentId = store.get('agentId');
+  const tokenData = await getToken();
+  if (!agentId || !tokenData || isTokenExpired(tokenData.expiryIso)) return;
+
+  const active = sdSessionEngine?.getActive();
+  if (!active || active.status !== 'active') return;
+
+  // We only sync if we know the event context.
+  const eventId = active.eventId ?? store.get('activeEventId') ?? store.get('lastKnownActiveEventId') ?? null;
+  if (!eventId) return;
+
+  const ping = connectivity.getSnapshot();
+  const deviceId = getOrCreateDeviceId();
+
+  const payload = {
+    agent_id: agentId,
+    device_id: deviceId,
+    event_id: eventId,
+    camera_number: active.binding?.cameraNumber ?? null,
+    sd_card_id: active.binding?.sdCardId ?? null,
+    file: {
+      filename: params.filename,
+      original_path: params.fullPath,
+      type: inferMediaTypeFromFilename(params.filename),
+      size_bytes: params.sizeBytes,
+      checksum: params.quickHash ?? null,
+      created_at: params.createdAtIso ?? null,
+    },
+    parsed_metadata: parseFilenameMetadata(params.filename),
+  };
+
+  if (!ping.online) {
+    offlineQueue.enqueue({ endpoint: '/media/sync', method: 'POST', payload });
+    audit.info('media.sync_queued_offline', { filename: params.filename, eventId });
+    return;
+  }
+
+  try {
+    await api.request({ method: 'POST', url: '/media/sync', data: payload, timeoutMs: 20000 });
+    audit.info('media.sync_sent', { filename: params.filename, eventId });
+  } catch (e: any) {
+    offlineQueue.enqueue({ endpoint: '/media/sync', method: 'POST', payload });
+    audit.warn('media.sync_failed_queued', { filename: params.filename, eventId, reason: e?.message ?? 'unknown' });
+  }
+}
 
 let copyState: CopyState | null = null;
 let warnedDestinations: Set<string> = new Set();
@@ -1099,6 +1177,21 @@ async function tryHandleCopiedFile(candidate: CopyCandidate): Promise<void> {
       filesCopied,
       filesPending,
     });
+  }
+
+  // Media ingestion: create/update media record in backend (online or offline-queued)
+  try {
+    const qh = copyState.hashByKey.get(key) ?? null;
+    await trySyncMediaOnCopy({
+      sessionId: active.sessionId,
+      filename: candidate.filename,
+      fullPath: candidate.fullPath,
+      sizeBytes: candidate.sizeBytes,
+      quickHash: qh,
+      createdAtIso: null,
+    });
+  } catch {
+    // non-blocking
   }
 
   mainWindow?.webContents?.send('copy:file-copied', {
