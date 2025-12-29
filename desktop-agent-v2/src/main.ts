@@ -4,6 +4,7 @@ import path from 'path';
 import { existsSync, promises as fs } from 'fs';
 import fsSync from 'fs';
 import crypto from 'crypto';
+import WebSocket from 'ws';
 import { APP_NAME } from './core/constants';
 import { DEFAULT_API_URL } from './core/constants';
 import { store } from './core/store';
@@ -35,6 +36,9 @@ let heartbeatTimer: NodeJS.Timeout | null = null;
 let queueDrainTimer: NodeJS.Timeout | null = null;
 let configRefreshTimer: NodeJS.Timeout | null = null;
 let streamTunnelTimer: NodeJS.Timeout | null = null;
+let streamTunnelWs: WebSocket | null = null;
+let streamTunnelWsReconnectTimer: NodeJS.Timeout | null = null;
+let streamTunnelWsConnected = false;
 let isQuitting = false;
 
 let lastAttention: { reason: string; data: any } | null = null;
@@ -769,6 +773,8 @@ async function pollStreamJobsOnce(): Promise<void> {
   const tokenData = await getToken();
   if (!agentId || !tokenData || isTokenExpired(tokenData.expiryIso)) return;
 
+  if (streamTunnelWsConnected) return;
+
   const ping = connectivity.getSnapshot();
   if (!ping.online) return;
 
@@ -881,6 +887,135 @@ async function pollStreamJobsOnce(): Promise<void> {
   } catch {
     // non-blocking
   }
+}
+
+function startStreamTunnelWs(): void {
+  const wsUrl = process.env.STREAM_TUNNEL_WS_URL;
+  if (!wsUrl) return;
+
+  const agentId = store.get('agentId');
+  if (!agentId) return;
+
+  const apiKey = process.env.STREAM_TUNNEL_API_KEY ?? '';
+
+  const connect = () => {
+    if (isQuitting) return;
+    try {
+      streamTunnelWsConnected = false;
+      if (streamTunnelWs) {
+        try {
+          streamTunnelWs.close();
+        } catch {
+          // ignore
+        }
+      }
+
+      const ws = new WebSocket(wsUrl);
+      streamTunnelWs = ws;
+
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ kind: 'hello', agent_id: agentId, api_key: apiKey }));
+      });
+
+      ws.on('message', async (raw) => {
+        let msg: any;
+        try {
+          msg = JSON.parse(raw.toString());
+        } catch {
+          return;
+        }
+
+        if (msg?.kind === 'hello_ack') {
+          streamTunnelWsConnected = true;
+          return;
+        }
+
+        if (msg?.kind !== 'stream_request') return;
+
+        const jobId: string | undefined = msg?.job_id;
+        const filePath: string | undefined = msg?.file_path;
+        const start: number = Number(msg?.start ?? 0);
+        const end: number = Number(msg?.end ?? -1);
+
+        if (!jobId || !filePath || !Number.isFinite(start) || !Number.isFinite(end)) {
+          ws.send(JSON.stringify({ kind: 'stream_response', job_id: jobId ?? 'unknown', status: 400, error: 'invalid_job' }));
+          return;
+        }
+
+        if (end < start) {
+          ws.send(JSON.stringify({ kind: 'stream_response', job_id: jobId, status: 416, error: 'invalid_range' }));
+          return;
+        }
+
+        if (!isAllowedStreamPath(filePath)) {
+          ws.send(JSON.stringify({ kind: 'stream_response', job_id: jobId, status: 403, error: 'path_not_allowed' }));
+          return;
+        }
+
+        let st;
+        try {
+          st = await fs.stat(filePath);
+        } catch {
+          ws.send(JSON.stringify({ kind: 'stream_response', job_id: jobId, status: 404, error: 'file_not_found' }));
+          return;
+        }
+
+        const size = st.size;
+        if (size <= 0) {
+          ws.send(JSON.stringify({ kind: 'stream_response', job_id: jobId, status: 404, error: 'empty_file' }));
+          return;
+        }
+
+        const safeStart = Math.max(0, Math.min(start, Math.max(0, size - 1)));
+        const safeEnd = Math.max(safeStart, Math.min(end, Math.max(0, size - 1)));
+        const maxChunk = 2 * 1024 * 1024;
+        const boundedEnd = Math.min(safeEnd, safeStart + maxChunk - 1);
+        const length = boundedEnd - safeStart + 1;
+
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType = ext === '.mp4' ? 'video/mp4' : ext === '.mov' ? 'video/quicktime' : 'application/octet-stream';
+
+        const fh = await fs.open(filePath, 'r');
+        try {
+          const buf = Buffer.alloc(length);
+          const { bytesRead } = await fh.read(buf, 0, length, safeStart);
+          const out = buf.subarray(0, bytesRead);
+
+          const statusCode = safeStart === 0 && boundedEnd >= size - 1 ? 200 : 206;
+          ws.send(
+            JSON.stringify({
+              kind: 'stream_response',
+              job_id: jobId,
+              status: statusCode,
+              headers: {
+                'Content-Type': contentType,
+                'Accept-Ranges': 'bytes',
+                ...(statusCode === 206 ? { 'Content-Range': `bytes ${safeStart}-${safeStart + bytesRead - 1}/${size}` } : {}),
+                'Content-Length': String(bytesRead),
+              },
+              data_base64: out.toString('base64'),
+            })
+          );
+        } finally {
+          await fh.close();
+        }
+      });
+
+      const onDown = () => {
+        streamTunnelWsConnected = false;
+        if (streamTunnelWsReconnectTimer) clearTimeout(streamTunnelWsReconnectTimer);
+        streamTunnelWsReconnectTimer = setTimeout(connect, 1500);
+      };
+
+      ws.on('close', onDown);
+      ws.on('error', onDown);
+    } catch {
+      if (streamTunnelWsReconnectTimer) clearTimeout(streamTunnelWsReconnectTimer);
+      streamTunnelWsReconnectTimer = setTimeout(connect, 1500);
+    }
+  };
+
+  connect();
 }
 
 function startStreamTunnelLoop(): void {
@@ -2437,6 +2572,7 @@ async function initCore() {
 
   // Streaming tunnel worker (agent-side) for proxy-stream
   startStreamTunnelLoop();
+  startStreamTunnelWs();
 
   // Periodic config refresh (non-blocking)
   if (configRefreshTimer) clearInterval(configRefreshTimer);

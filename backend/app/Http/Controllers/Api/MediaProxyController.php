@@ -7,6 +7,7 @@ use App\Models\Agent;
 use App\Models\Media;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -46,6 +47,59 @@ class MediaProxyController extends Controller
 
         if (!$agent) {
             return response()->json(['error' => 'Editor agent offline'], 404);
+        }
+
+        $tunnelHttpUrl = env('STREAM_TUNNEL_HTTP_URL');
+        if ($tunnelHttpUrl) {
+            try {
+                $range = $request->header('Range');
+                $start = 0;
+                $end = null;
+                $maxChunk = 2 * 1024 * 1024; // 2MB
+
+                if ($range) {
+                    if (!preg_match('/bytes=(\d+)-(\d+)?/', $range, $m)) {
+                        return response()->json(['error' => 'Invalid Range'], 416);
+                    }
+                    $start = (int) $m[1];
+                    if (isset($m[2]) && $m[2] !== '') {
+                        $end = (int) $m[2];
+                    }
+                }
+
+                if ($end === null || $end < $start || ($end - $start + 1) > $maxChunk) {
+                    $end = $start + $maxChunk - 1;
+                }
+
+                $http = Http::timeout(16);
+                $key = env('STREAM_TUNNEL_API_KEY');
+                if ($key) {
+                    $http = $http->withHeaders(['X-Tunnel-Key' => $key]);
+                }
+
+                $resp = $http->post(rtrim($tunnelHttpUrl, '/') . '/stream/request', [
+                    'agent_id' => $agent->agent_id,
+                    'file_path' => $media->file_path,
+                    'start' => $start,
+                    'end' => $end,
+                ]);
+
+                if ($resp->ok()) {
+                    $payload = $resp->json();
+                    $status = (int) ($payload['status'] ?? 500);
+                    $headers = is_array($payload['headers'] ?? null) ? $payload['headers'] : [];
+                    $b64 = $payload['data_base64'] ?? null;
+                    $bytes = $b64 ? base64_decode($b64) : '';
+
+                    $r = new Response($bytes, $status);
+                    foreach ($headers as $k => $v) {
+                        $r->headers->set($k, $v);
+                    }
+                    return $r;
+                }
+            } catch (\Throwable $e) {
+                // fall back
+            }
         }
 
         $cache = Cache::store('streaming');

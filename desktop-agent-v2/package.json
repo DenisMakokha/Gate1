@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "electron": "^35.7.5",
@@ -33,7 +34,8 @@
     "electron-store": "^8.1.0",
     "ffprobe-static": "^3.1.0",
     "keytar": "^7.9.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "ws": "^8.18.3"
   },
   "build": {
     "appId": "com.neliumsystems.gate1.agent.v2",
