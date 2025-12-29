@@ -40,7 +40,7 @@ class GroupController extends Controller
             $query->where('event_id', $request->event_id);
         }
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             // Group leaders see only their groups
             if ($user->isGroupLeader()) {
                 $query->where('leader_id', $user->id);

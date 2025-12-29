@@ -292,7 +292,7 @@ class UserController extends Controller
     {
         $authUser = auth('api')->user();
         
-        if (!$authUser->isAdmin() && !$authUser->isGroupLeader()) {
+        if (!$authUser->hasOperationalAccess() && !$authUser->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -302,7 +302,7 @@ class UserController extends Controller
             });
 
         // Group leaders can only see editors in their groups
-        if ($authUser->isGroupLeader() && !$authUser->isAdmin()) {
+        if ($authUser->isGroupLeader() && !$authUser->hasOperationalAccess()) {
             $leaderGroupIds = $authUser->ledGroups()->pluck('id')->toArray();
             $query->whereHas('groups', function ($q) use ($leaderGroupIds) {
                 $q->whereIn('groups.id', $leaderGroupIds);
