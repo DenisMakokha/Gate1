@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { issueService } from '../services/api';
 import {
   Bell,
   Check,
@@ -8,25 +9,15 @@ import {
   AlertTriangle,
   Info,
   CheckCircle,
-  XCircle,
   Clock,
   Filter,
   Settings,
 } from 'lucide-react';
 
-const mockNotifications = [
-  { id: 1, type: 'alert', title: 'New Issue Reported', message: 'Camera CAM-042 reported corrupt file in Group Alpha', time: '5 min ago', read: false, link: '/issues' },
-  { id: 2, type: 'success', title: 'Backup Completed', message: 'Daily backup for Event TEST-2024 completed successfully', time: '1 hour ago', read: false, link: '/backups' },
-  { id: 3, type: 'info', title: 'New Editor Joined', message: 'John Doe has joined Group Beta as an editor', time: '2 hours ago', read: true, link: '/users' },
-  { id: 4, type: 'warning', title: 'Storage Warning', message: 'Backup disk DISK-003 is at 85% capacity', time: '3 hours ago', read: true, link: '/storage-forecast' },
-  { id: 5, type: 'alert', title: 'Issue Escalated', message: 'Missing footage issue #127 has been escalated', time: '5 hours ago', read: true, link: '/issues' },
-  { id: 6, type: 'success', title: 'QA Review Complete', message: '15 media files passed quality control', time: '1 day ago', read: true, link: '/quality-control' },
-  { id: 7, type: 'info', title: 'Event Started', message: 'Event TEST-2024 is now active', time: '2 days ago', read: true, link: '/events' },
-];
-
 export default function Notifications() {
-  const { user } = useAuth();
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { activeEvent } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [showSettings, setShowSettings] = useState(false);
   const [preferences, setPreferences] = useState({
@@ -36,6 +27,66 @@ export default function Notifications() {
     users: true,
     qa: true,
   });
+
+  useEffect(() => {
+    loadNotifications();
+  }, [activeEvent?.id]);
+
+  const formatTimeAgo = (dateValue) => {
+    if (!dateValue) return '—';
+    const date = new Date(dateValue);
+    const now = new Date();
+    const diffMs = now - date;
+    const mins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMs / 3600000);
+    const days = Math.floor(diffMs / 86400000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins} min ago`;
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  };
+
+  const loadNotifications = async () => {
+    try {
+      setLoading(true);
+      if (!activeEvent?.id) {
+        setNotifications([]);
+        return;
+      }
+
+      const res = await issueService.getAll({
+        event_id: activeEvent.id,
+        status: 'open',
+        per_page: 10,
+      });
+
+      const issues = res?.data || [];
+
+      const mapped = issues.map((issue) => {
+        const severity = (issue.severity || 'info').toLowerCase();
+        const type = severity === 'critical' ? 'alert' : severity === 'high' ? 'warning' : 'info';
+        const title = severity === 'critical' ? 'Critical Issue Reported' : 'Issue Reported';
+        const camera = issue?.media?.camera_number || issue?.camera_number;
+
+        return {
+          id: issue.issue_id || issue.id,
+          type,
+          title,
+          message: `${issue.type?.replaceAll('_', ' ') || 'Issue'}${camera ? ` • Camera ${camera}` : ''}`,
+          time: formatTimeAgo(issue.created_at),
+          read: false,
+          link: '/issues',
+        };
+      });
+
+      setNotifications(mapped);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredNotifications = notifications.filter(n => {
     if (filter === 'unread') return !n.read;
@@ -157,7 +208,12 @@ export default function Notifications() {
         </div>
 
         <div className="divide-y divide-gray-100">
-          {filteredNotifications.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">Loading notifications...</p>
+            </div>
+          ) : filteredNotifications.length === 0 ? (
             <div className="text-center py-12">
               <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No notifications</p>
