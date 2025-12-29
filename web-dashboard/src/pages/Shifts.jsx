@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { shiftService, userService } from '../services/api';
 import {
   Calendar,
   Clock,
@@ -18,27 +19,14 @@ import {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-const mockShifts = [
-  { id: 1, userId: 1, userName: 'John Doe', date: '2024-12-26', startHour: 8, endHour: 16, status: 'active', checkedIn: true },
-  { id: 2, userId: 2, userName: 'Jane Smith', date: '2024-12-26', startHour: 16, endHour: 24, status: 'scheduled' },
-  { id: 3, userId: 3, userName: 'Mike Johnson', date: '2024-12-26', startHour: 8, endHour: 16, status: 'completed' },
-  { id: 4, userId: 1, userName: 'John Doe', date: '2024-12-27', startHour: 8, endHour: 16, status: 'scheduled' },
-  { id: 5, userId: 4, userName: 'Sarah Wilson', date: '2024-12-27', startHour: 16, endHour: 24, status: 'scheduled' },
-];
-
-const mockEditors = [
-  { id: 1, name: 'John Doe' },
-  { id: 2, name: 'Jane Smith' },
-  { id: 3, name: 'Mike Johnson' },
-  { id: 4, name: 'Sarah Wilson' },
-  { id: 5, name: 'Tom Brown' },
-];
-
 export default function Shifts() {
-  const { isAdmin, isTeamLead, isGroupLeader } = useAuth();
+  const { activeEvent, isAdmin, isTeamLead, isGroupLeader } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('week'); // 'day', 'week'
-  const [shifts, setShifts] = useState(mockShifts);
+  const [shifts, setShifts] = useState([]);
+  const [editors, setEditors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [formData, setFormData] = useState({
@@ -68,9 +56,60 @@ export default function Shifts() {
     return date.toISOString().split('T')[0];
   };
 
+  const toTimeString = (hour) => `${String(hour).padStart(2, '0')}:00`;
+
   const getShiftsForDate = (date) => {
     return shifts.filter(s => s.date === formatDate(date));
   };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setMessage(null);
+
+      if (!activeEvent?.id) {
+        setShifts([]);
+        setEditors([]);
+        return;
+      }
+
+      const editorsRes = await userService.getEditorsStatus({});
+      setEditors(editorsRes?.editors || []);
+
+      const datesToLoad = view === 'day' ? [currentDate] : weekDates;
+      const results = await Promise.all(
+        datesToLoad.map((d) =>
+          shiftService.getAll({
+            event_id: activeEvent.id,
+            date: formatDate(d),
+          })
+        )
+      );
+
+      const mapped = results
+        .flatMap((r) => (r?.shifts || []))
+        .map((s) => ({
+          id: s.id,
+          userId: s.user_id,
+          userName: s.user_name,
+          date: s.shift_date,
+          startHour: parseInt((s.start_time || '0:00').split(':')[0], 10),
+          endHour: parseInt((s.end_time || '0:00').split(':')[0], 10),
+          status: s.status,
+        }));
+
+      setShifts(mapped);
+    } catch (error) {
+      console.error('Failed to load shifts:', error);
+      setMessage('Failed to load shifts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [activeEvent?.id, currentDate, view]);
 
   const navigateWeek = (direction) => {
     const newDate = new Date(currentDate);
@@ -86,21 +125,29 @@ export default function Shifts() {
   };
 
   const handleCreateShift = () => {
-    if (!formData.userId) return;
-    
-    const editor = mockEditors.find(e => e.id === parseInt(formData.userId));
-    const newShift = {
-      id: Date.now(),
-      userId: parseInt(formData.userId),
-      userName: editor?.name || 'Unknown',
-      date: selectedSlot.date,
-      startHour: parseInt(formData.startHour),
-      endHour: parseInt(formData.endHour),
-      status: 'scheduled',
-    };
-    
-    setShifts(prev => [...prev, newShift]);
-    setShowModal(false);
+    if (!formData.userId || !selectedSlot?.date || !activeEvent?.id) return;
+    createShift();
+  };
+
+  const createShift = async () => {
+    try {
+      setMessage(null);
+      await shiftService.create({
+        event_id: activeEvent.id,
+        user_id: parseInt(formData.userId, 10),
+        group_id: null,
+        shift_date: selectedSlot.date,
+        start_time: toTimeString(parseInt(formData.startHour, 10)),
+        end_time: toTimeString(parseInt(formData.endHour, 10)),
+        notes: null,
+      });
+      setShowModal(false);
+      setFormData({ userId: '', startHour: 8, endHour: 16 });
+      await loadData();
+    } catch (error) {
+      console.error('Failed to create shift:', error);
+      setMessage(error?.message || 'Failed to create shift');
+    }
   };
 
   const getShiftColor = (status) => {
@@ -120,6 +167,17 @@ export default function Shifts() {
 
   return (
     <div className="space-y-6">
+      {message && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          {message}
+        </div>
+      )}
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before managing shifts.
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Shift Schedule</h1>
@@ -299,7 +357,7 @@ export default function Shifts() {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select editor...</option>
-                  {mockEditors.map(editor => (
+                  {editors.map((editor) => (
                     <option key={editor.id} value={editor.id}>{editor.name}</option>
                   ))}
                 </select>

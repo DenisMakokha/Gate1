@@ -29,7 +29,7 @@ class ShiftController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -45,7 +45,7 @@ class ShiftController extends Controller
         }
 
         // Group leaders only see their groups
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $query->whereIn('group_id', $groupIds);
         }
@@ -76,7 +76,7 @@ class ShiftController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -116,7 +116,7 @@ class ShiftController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -180,7 +180,7 @@ class ShiftController extends Controller
         $user = auth('api')->user();
         $shift = Shift::findOrFail($shiftId);
 
-        if ($shift->user_id !== $user->id && !$user->isAdmin()) {
+        if ($shift->user_id !== $user->id && !$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -204,7 +204,7 @@ class ShiftController extends Controller
         $user = auth('api')->user();
         $shift = Shift::findOrFail($shiftId);
 
-        if ($shift->user_id !== $user->id && !$user->isAdmin()) {
+        if ($shift->user_id !== $user->id && !$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -230,7 +230,7 @@ class ShiftController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isGroupLeader()) {
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -243,7 +243,7 @@ class ShiftController extends Controller
             $query->where('event_id', $eventId);
         }
 
-        if (!$user->isAdmin()) {
+        if (!$user->hasOperationalAccess()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $query->whereIn('group_id', $groupIds);
         }
@@ -354,7 +354,7 @@ class ShiftController extends Controller
         $user = auth('api')->user();
         $handoff = ShiftHandoff::findOrFail($handoffId);
 
-        if ($handoff->incoming_user_id !== $user->id && !$user->isAdmin()) {
+        if ($handoff->incoming_user_id !== $user->id && !$user->hasOperationalAccess()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

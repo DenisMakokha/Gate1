@@ -241,4 +241,17 @@ export const workAllocationService = {
   }),
 };
 
+export const shiftService = {
+  getAll: (params) => api.get('/shifts', { params }),
+  create: (data) => api.post('/shifts', data),
+  bulkCreate: (data) => api.post('/shifts/bulk', data),
+  myShifts: (params) => api.get('/shifts/my-shifts', { params }),
+  todayOverview: (params) => api.get('/shifts/today-overview', { params }),
+  checkIn: (shiftId) => api.post(`/shifts/${shiftId}/check-in`),
+  checkOut: (shiftId) => api.post(`/shifts/${shiftId}/check-out`),
+  createHandoff: (data) => api.post('/shifts/handoff', data),
+  getHandoff: (handoffId) => api.get(`/shifts/handoff/${handoffId}`),
+  acknowledgeHandoff: (handoffId) => api.post(`/shifts/handoff/${handoffId}/acknowledge`),
+};
+
 export default api;
