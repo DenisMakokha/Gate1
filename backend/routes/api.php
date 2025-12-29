@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\GroupController;
 use App\Http\Controllers\Api\IssueController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\MediaProxyController;
 use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
@@ -74,6 +75,10 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/config', [AgentController::class, 'config']);
         Route::post('/sd-card/bind', [AgentController::class, 'bindSdCard']);
         Route::get('/sd-card', [AgentController::class, 'getSdCard']);
+
+        // Streaming tunnel (agent long-poll)
+        Route::post('/stream/poll', [\App\Http\Controllers\Api\AgentStreamController::class, 'poll']);
+        Route::post('/stream/respond', [\App\Http\Controllers\Api\AgentStreamController::class, 'respond']);
     });
 
     // Camera session routes
@@ -96,6 +101,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/{mediaId}/log-playback', [MediaController::class, 'logPlayback']);
         Route::post('/{mediaId}/log-download', [MediaController::class, 'logDownload']);
         Route::get('/{mediaId}/playback-source', [MediaController::class, 'getPlaybackSource']);
+
+        // Backend-proxied playback (public internet)
+        Route::get('/{mediaId}/proxy-stream', [MediaProxyController::class, 'proxyStream']);
     });
 
     // Issue routes

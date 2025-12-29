@@ -463,7 +463,7 @@ class MediaController extends Controller
             $source = [
                 'type' => 'editor_stream',
                 'label' => 'Editor Stream (Live)',
-                'url' => $media->preview_url,
+                'url' => url("/api/media/{$media->media_id}/proxy-stream"),
                 'available' => true,
             ];
         }

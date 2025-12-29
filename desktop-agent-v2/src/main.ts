@@ -25,6 +25,7 @@ import { BackupEngine, type BackupFileError, type BackupProgress } from './core/
 import { IssueEngine, type Issue } from './core/issueEngine';
 import { MediaMetadataEngine } from './core/mediaMetadata';
 
+
 let mainWindow: BrowserWindow | null = null;
 let mascotWindow: BrowserWindow | null = null;
 let messageWindow: BrowserWindow | null = null;
@@ -33,6 +34,7 @@ let api: ApiClient;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let queueDrainTimer: NodeJS.Timeout | null = null;
 let configRefreshTimer: NodeJS.Timeout | null = null;
+let streamTunnelTimer: NodeJS.Timeout | null = null;
 let isQuitting = false;
 
 let lastAttention: { reason: string; data: any } | null = null;
@@ -746,6 +748,122 @@ function handleRenameGuidance(evt: any) {
 function isPathInside(child: string, parent: string): boolean {
   const rel = path.relative(parent, child);
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+function isAllowedStreamPath(filePath: string): boolean {
+  const cfg = store.get('config');
+  const watched = Array.isArray(cfg?.watchedFolders) ? (cfg?.watchedFolders as string[]) : [];
+  const backupDestination = typeof cfg?.backupDestination === 'string' ? (cfg?.backupDestination as string) : null;
+  const backupDestinations = Array.isArray(cfg?.backupDestinations) ? (cfg?.backupDestinations as string[]) : [];
+
+  const roots = [...watched, ...(backupDestination ? [backupDestination] : []), ...backupDestinations]
+    .filter(Boolean)
+    .map((p) => path.resolve(String(p)));
+
+  const resolved = path.resolve(String(filePath));
+  return roots.some((r) => resolved === r || isPathInside(resolved, r));
+}
+
+async function pollStreamJobsOnce(): Promise<void> {
+  const agentId = store.get('agentId');
+  const tokenData = await getToken();
+  if (!agentId || !tokenData || isTokenExpired(tokenData.expiryIso)) return;
+
+  const ping = connectivity.getSnapshot();
+  if (!ping.online) return;
+
+  try {
+    const deviceId = getOrCreateDeviceId();
+    const res: any = await api.request({
+      method: 'POST',
+      url: '/agent/stream/poll',
+      data: { agent_id: agentId, device_id: deviceId },
+      timeoutMs: 20000,
+    });
+
+    const job = res?.job ?? null;
+    if (!job) return;
+
+    const jobId: string | undefined = job?.job_id;
+    const filePath: string | undefined = job?.file_path;
+    const start: number = Number(job?.start ?? 0);
+    const end: number = Number(job?.end ?? -1);
+
+    if (!jobId || !filePath || !Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+      await api.request({
+        method: 'POST',
+        url: '/agent/stream/respond',
+        data: { job_id: jobId ?? 'unknown', status: 400, error: 'invalid_job' },
+        timeoutMs: 20000,
+      });
+      return;
+    }
+
+    if (!isAllowedStreamPath(filePath)) {
+      await api.request({
+        method: 'POST',
+        url: '/agent/stream/respond',
+        data: { job_id: jobId, status: 403, error: 'path_not_allowed' },
+        timeoutMs: 20000,
+      });
+      return;
+    }
+
+    let st;
+    try {
+      st = await fs.stat(filePath);
+    } catch {
+      await api.request({
+        method: 'POST',
+        url: '/agent/stream/respond',
+        data: { job_id: jobId, status: 404, error: 'file_not_found' },
+        timeoutMs: 20000,
+      });
+      return;
+    }
+
+    const size = st.size;
+    const safeStart = Math.max(0, Math.min(start, Math.max(0, size - 1)));
+    const safeEnd = Math.max(safeStart, Math.min(end, Math.max(0, size - 1)));
+    const maxChunk = 2 * 1024 * 1024;
+    const boundedEnd = Math.min(safeEnd, safeStart + maxChunk - 1);
+    const length = boundedEnd - safeStart + 1;
+
+    const fh = await fs.open(filePath, 'r');
+    try {
+      const buf = Buffer.alloc(length);
+      const { bytesRead } = await fh.read(buf, 0, length, safeStart);
+      const out = buf.subarray(0, bytesRead);
+
+      await api.request({
+        method: 'POST',
+        url: '/agent/stream/respond',
+        data: {
+          job_id: jobId,
+          status: 206,
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Accept-Ranges': 'bytes',
+            'Content-Range': `bytes ${safeStart}-${safeStart + bytesRead - 1}/${size}`,
+            'Content-Length': String(bytesRead),
+          },
+          data_base64: out.toString('base64'),
+        },
+        timeoutMs: 20000,
+      });
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    // non-blocking
+  }
+}
+
+function startStreamTunnelLoop(): void {
+  if (streamTunnelTimer) clearInterval(streamTunnelTimer);
+  streamTunnelTimer = setInterval(() => {
+    void pollStreamJobsOnce();
+  }, 900);
 }
 
 function isUnsafeDestination(destDir: string): { unsafe: boolean; reason?: string } {
@@ -1836,6 +1954,9 @@ async function initCore() {
   connectivity = new ConnectivityMonitor(() => api.ping());
   connectivity.start(10_000);
 
+  // Drain queue immediately on startup (best-effort), then periodically.
+  void drainQueueOnce();
+
   progressReporter = new ProgressReporter({
     api,
     queue: offlineQueue,
@@ -2288,7 +2409,10 @@ async function initCore() {
   if (queueDrainTimer) clearInterval(queueDrainTimer);
   queueDrainTimer = setInterval(async () => {
     await drainQueueOnce();
-  }, 10_000);
+  }, 5_000);
+
+  // Streaming tunnel worker (agent-side) for proxy-stream
+  startStreamTunnelLoop();
 
   // Periodic config refresh (non-blocking)
   if (configRefreshTimer) clearInterval(configRefreshTimer);
