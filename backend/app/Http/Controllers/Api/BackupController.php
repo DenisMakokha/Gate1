@@ -188,7 +188,10 @@ class BackupController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        $pending = Media::whereDoesntHave('backups', fn($q) => $q->where('is_verified', true))
+        $eventId = $request->get('event_id');
+
+        $pending = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereDoesntHave('backups', fn($q) => $q->where('is_verified', true))
             ->with(['editor', 'event'])
             ->orderBy('created_at', 'asc')
             ->paginate($request->get('per_page', 50));

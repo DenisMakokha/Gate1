@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Event;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class EventController extends Controller
@@ -101,7 +102,7 @@ class EventController extends Controller
         ]);
     }
 
-    public function activate(int $id): JsonResponse
+    public function activate(Request $request, int $id): JsonResponse
     {
         $user = auth('api')->user();
 
@@ -109,12 +110,38 @@ class EventController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        $force = $request->boolean('force', false);
+
         $event = Event::findOrFail($id);
-        $event->update(['status' => 'active']);
 
-        AuditLog::log('event.activate', $user, 'Event', $event->id);
+        $otherActive = Event::where('status', 'active')
+            ->where('id', '!=', $event->id)
+            ->first();
 
-        return response()->json(['status' => 'activated']);
+        if ($otherActive && !$force) {
+            return response()->json([
+                'error' => 'Another event is already active',
+                'code' => 'ACTIVE_EVENT_EXISTS',
+                'active_event' => $otherActive->only(['id', 'name', 'code', 'start_date', 'end_date', 'status']),
+            ], 409);
+        }
+
+        DB::transaction(function () use ($event, $otherActive, $force, $user) {
+            if ($otherActive && $force) {
+                $old = $otherActive->toArray();
+                $otherActive->update(['status' => 'completed']);
+                AuditLog::log('event.auto_complete', $user, 'Event', $otherActive->id, $old, $otherActive->toArray());
+            }
+
+            $oldEvent = $event->toArray();
+            $event->update(['status' => 'active']);
+            AuditLog::log('event.activate', $user, 'Event', $event->id, $oldEvent, $event->toArray());
+        });
+
+        return response()->json([
+            'status' => 'activated',
+            'event' => $event->fresh()->loadCount(['media', 'groups', 'healingCases']),
+        ]);
     }
 
     public function complete(int $id): JsonResponse
@@ -154,10 +181,13 @@ class EventController extends Controller
 
     public function active(): JsonResponse
     {
-        $events = Event::where('status', 'active')
-            ->withCount(['media', 'groups'])
-            ->get();
+        $event = Event::where('status', 'active')
+            ->withCount(['media', 'groups', 'healingCases'])
+            ->orderByDesc('start_date')
+            ->first();
 
-        return response()->json($events);
+        return response()->json([
+            'event' => $event,
+        ]);
     }
 }

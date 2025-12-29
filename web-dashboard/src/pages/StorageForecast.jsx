@@ -114,10 +114,14 @@ export default function StorageForecast() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const eventId = activeEvent?.id;
+      if (!activeEvent?.id) {
+        setData(null);
+        setBackupData(null);
+        return;
+      }
       const [storageRes, backupRes] = await Promise.all([
         storageService.getUsage(),
-        backupService.getAnalytics(eventId),
+        backupService.getAnalytics(activeEvent.id),
       ]);
       setData(storageRes);
       setBackupData(backupRes);
@@ -163,13 +167,19 @@ export default function StorageForecast() {
         </div>
         <button
           onClick={loadData}
-          disabled={loading}
+          disabled={loading || !activeEvent?.id}
           className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before viewing storage forecast and backup analytics.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">

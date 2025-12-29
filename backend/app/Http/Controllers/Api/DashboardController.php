@@ -17,6 +17,16 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    private function resolveEventId(Request $request): ?int
+    {
+        $eventId = $request->get('event_id');
+        if ($eventId) {
+            return (int) $eventId;
+        }
+
+        $active = Event::where('status', 'active')->orderByDesc('start_date')->first();
+        return $active?->id;
+    }
     public function admin(Request $request): JsonResponse
     {
         $user = auth('api')->user();
@@ -30,16 +40,20 @@ class DashboardController extends Controller
         // Calculate camera health metrics
         $totalCameras = \App\Models\Camera::count();
         $camerasWithIssues = Issue::whereIn('status', ['open', 'acknowledged'])
+            ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
             ->distinct('camera_id')->count('camera_id');
         $camerasHealthy = max(0, $totalCameras - $camerasWithIssues);
         
         // Count early removals today
-        $earlyRemovalsToday = CameraSession::where('status', 'early_removal')
+        $earlyRemovalsToday = CameraSession::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->where('status', 'early_removal')
             ->whereDate('ended_at', today())->count();
         
         // Calculate backup coverage
         $totalMedia = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))->count();
-        $backedUp = Media::whereHas('backups', fn($q) => $q->where('is_verified', true))->count();
+        $backedUp = Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereHas('backups', fn($q) => $q->where('is_verified', true))
+            ->count();
         $backupCoverage = $totalMedia > 0 ? round(($backedUp / $totalMedia) * 100) : 0;
         
         return response()->json([
@@ -47,11 +61,19 @@ class DashboardController extends Controller
                 'total_media' => $totalMedia,
                 'media_today' => Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
                     ->whereDate('created_at', today())->count(),
-                'open_issues' => Issue::whereIn('status', ['open', 'acknowledged', 'in_progress'])->count(),
+                'open_issues' => Issue::whereIn('status', ['open', 'acknowledged', 'in_progress'])
+                    ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
+                    ->count(),
                 'critical_issues' => Issue::where('severity', 'critical')
-                    ->whereIn('status', ['open', 'acknowledged'])->count(),
-                'pending_backups' => Media::whereDoesntHave('backups', fn($q) => $q->where('is_verified', true))->count(),
-                'active_sessions' => CameraSession::where('status', 'active')->count(),
+                    ->whereIn('status', ['open', 'acknowledged'])
+                    ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
+                    ->count(),
+                'pending_backups' => Media::when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->whereDoesntHave('backups', fn($q) => $q->where('is_verified', true))
+                    ->count(),
+                'active_sessions' => CameraSession::when($eventId, fn($q) => $q->where('event_id', $eventId))
+                    ->where('status', 'active')
+                    ->count(),
                 'online_agents' => Agent::where('status', 'active')
                     ->where('last_seen_at', '>', now()->subMinutes(2))->count(),
                 'total_editors' => User::whereHas('roles', fn($q) => $q->where('name', 'editor'))->count(),
@@ -68,7 +90,8 @@ class DashboardController extends Controller
                     'name' => $e->name,
                     'media_count' => $e->media_count,
                 ]),
-            'groups_health' => Group::withCount([
+            'groups_health' => Group::when($eventId, fn($q) => $q->where('event_id', $eventId))
+                ->withCount([
                 'issues as open_issues' => fn($q) => $q->whereIn('status', ['open', 'acknowledged']),
             ])->orderByDesc('open_issues')->limit(10)->get()
                 ->map(fn($g) => [
@@ -78,6 +101,7 @@ class DashboardController extends Controller
                     'open_issues' => $g->open_issues,
                 ]),
             'recent_issues' => Issue::with(['media', 'reporter'])
+                ->when($eventId, fn($q) => $q->whereHas('media', fn($m) => $m->where('event_id', $eventId)))
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->orderByDesc('created_at')
                 ->limit(10)
@@ -1439,6 +1463,14 @@ class DashboardController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        $eventId = $this->resolveEventId($request);
+        if (!$eventId) {
+            return response()->json([
+                'error' => 'No active event. Activate an event before viewing live operations.',
+                'code' => 'NO_ACTIVE_EVENT',
+            ], 409);
+        }
+
         // Scope based on role
         $groupIds = null;
         if ($user->isGroupLeader() && !$user->hasOperationalAccess()) {
@@ -1446,7 +1478,8 @@ class DashboardController extends Controller
         }
 
         // Active SD sessions
-        $activeSessions = CameraSession::with(['editor', 'camera', 'event', 'sdCard'])
+        $activeSessions = CameraSession::with(['editor', 'event', 'sdCard'])
+            ->where('event_id', $eventId)
             ->where('status', 'active')
             ->when($groupIds, function ($q) use ($groupIds) {
                 $q->whereHas('editor', fn($eq) => $eq->whereHas('groups', fn($gq) => $gq->whereIn('groups.id', $groupIds)));
@@ -1455,8 +1488,8 @@ class DashboardController extends Controller
             ->get()
             ->map(fn($s) => [
                 'id' => $s->id,
-                'camera_number' => $s->camera?->camera_number ?? $s->camera_number,
-                'sd_label' => $s->sdCard?->sd_label ?? $s->sd_label,
+                'camera_number' => $s->camera_number,
+                'sd_label' => $s->sdCard?->sd_label,
                 'event_name' => $s->event?->name ?? 'Unknown',
                 'editor_name' => $s->editor?->name ?? 'Unknown',
                 'group_code' => $s->editor?->groups->first()?->group_code ?? '',
@@ -1468,8 +1501,9 @@ class DashboardController extends Controller
             ]);
 
         // Early removals today
-        $earlyRemovals = CameraSession::with(['editor', 'camera'])
-            ->where('status', 'early_removal')
+        $earlyRemovals = CameraSession::with(['editor', 'sdCard'])
+            ->where('event_id', $eventId)
+            ->where('status', 'early_removed')
             ->whereDate('ended_at', today())
             ->when($groupIds, function ($q) use ($groupIds) {
                 $q->whereHas('editor', fn($eq) => $eq->whereHas('groups', fn($gq) => $gq->whereIn('groups.id', $groupIds)));
@@ -1478,21 +1512,36 @@ class DashboardController extends Controller
             ->get()
             ->map(fn($s) => [
                 'id' => $s->id,
-                'camera_number' => $s->camera?->camera_number ?? $s->camera_number,
-                'sd_label' => $s->sdCard?->sd_label ?? $s->sd_label,
+                'camera_number' => $s->camera_number,
+                'sd_label' => $s->sdCard?->sd_label,
                 'files_pending' => max(0, ($s->files_detected ?? 0) - ($s->files_copied ?? 0)),
                 'editor_name' => $s->editor?->name ?? 'Unknown',
                 'removed_at' => $s->ended_at?->toIso8601String(),
             ]);
 
         // Camera health overview
-        $cameras = \App\Models\Camera::withCount([
-            'issues as open_issues' => fn($q) => $q->whereIn('status', ['open', 'acknowledged']),
-        ])->get()->map(fn($c) => [
-            'camera_number' => $c->camera_number,
-            'health_score' => $c->open_issues > 5 ? 30 : ($c->open_issues > 2 ? 60 : ($c->open_issues > 0 ? 80 : 95)),
-            'open_issues' => $c->open_issues,
-        ])->sortBy('health_score')->values();
+        $cameras = \App\Models\Camera::where('event_id', $eventId)
+            ->withCount([
+                // Camera issues are tracked via media issues; approximate by counting issues for this camera_number in this event.
+            ])
+            ->get()
+            ->map(function ($c) use ($eventId) {
+                $openIssues = Issue::whereIn('status', ['open', 'acknowledged'])
+                    ->whereHas('media', function ($mq) use ($eventId, $c) {
+                        $mq->where('event_id', $eventId)->where('camera_number', $c->camera_number);
+                    })
+                    ->count();
+
+                $healthScore = $openIssues > 5 ? 30 : ($openIssues > 2 ? 60 : ($openIssues > 0 ? 80 : 95));
+
+                return [
+                    'camera_number' => $c->camera_number,
+                    'health_score' => $healthScore,
+                    'open_issues' => $openIssues,
+                ];
+            })
+            ->sortBy('health_score')
+            ->values();
 
         // Stats
         $totalCameras = $cameras->count();

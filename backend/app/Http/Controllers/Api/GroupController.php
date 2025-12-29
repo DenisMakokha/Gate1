@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Event;
 use App\Models\Group;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -59,7 +60,7 @@ class GroupController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'event_id' => 'required|exists:events,id',
+            'event_id' => 'nullable|exists:events,id',
             'leader_id' => 'nullable|exists:users,id',
             'leader_phone' => 'nullable|string|max:20',
         ]);
@@ -70,13 +71,25 @@ class GroupController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        $groupNumber = Group::where('event_id', $request->event_id)->count() + 1;
+        $eventId = $request->event_id;
+        if (!$eventId) {
+            $activeEvent = Event::where('status', 'active')->orderByDesc('start_date')->first();
+            if (!$activeEvent) {
+                return response()->json([
+                    'error' => 'No active event. Create and activate an event before creating groups.',
+                    'code' => 'NO_ACTIVE_EVENT',
+                ], 409);
+            }
+            $eventId = $activeEvent->id;
+        }
+
+        $groupNumber = Group::where('event_id', $eventId)->count() + 1;
 
         $group = Group::create([
             'group_code' => 'G-' . str_pad($groupNumber, 2, '0', STR_PAD_LEFT),
             'name' => $request->name,
             'description' => $request->description,
-            'event_id' => $request->event_id,
+            'event_id' => $eventId,
             'leader_id' => $request->leader_id,
             'leader_phone' => $request->leader_phone,
             'is_active' => true,

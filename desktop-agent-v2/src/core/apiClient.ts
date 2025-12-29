@@ -50,10 +50,10 @@ export class ApiClient {
     return res.data;
   }
 
-  async getActiveEvents(): Promise<any[]> {
+  async getActiveEvent(): Promise<any | null> {
     const res = await this.client.get('/events/active');
-    // backend returns an array
-    return res.data as any[];
+    // backend returns { event: ... } or { event: null }
+    return res.data?.event ?? null;
   }
 
   async startServerSession(payload: {

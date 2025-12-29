@@ -1191,8 +1191,8 @@ async function tryStartServerSession(snapshot?: SnapshotResult): Promise<void> {
   let eventId: number | null = null;
   try {
     if (ping.online) {
-      const events = await api.getActiveEvents();
-      eventId = (events?.[0] as any)?.id ?? null;
+      const activeEvent = await api.getActiveEvent();
+      eventId = activeEvent?.id ?? null;
     }
   } catch {
     eventId = null;

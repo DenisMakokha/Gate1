@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { healingCaseService, eventService, groupService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { healingCaseService, groupService } from '../services/api';
 import {
   Heart,
   Plus,
@@ -19,8 +20,8 @@ import {
 } from 'lucide-react';
 
 export default function HealingCases() {
+  const { activeEvent } = useAuth();
   const [cases, setCases] = useState([]);
-  const [events, setEvents] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -43,19 +44,24 @@ export default function HealingCases() {
 
   useEffect(() => {
     loadData();
-  }, [search, statusFilter]);
+  }, [search, statusFilter, activeEvent?.id]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [casesRes, eventsRes, groupsRes, statsRes] = await Promise.all([
-        healingCaseService.getAll({ search, status: statusFilter }),
-        eventService.getAll(),
-        groupService.getAll(),
-        healingCaseService.getStats(),
+      if (!activeEvent?.id) {
+        setCases([]);
+        setGroups([]);
+        setStats(null);
+        return;
+      }
+
+      const [casesRes, groupsRes, statsRes] = await Promise.all([
+        healingCaseService.getAll({ event_id: activeEvent.id, search, status: statusFilter }),
+        groupService.getAll({ event_id: activeEvent.id }),
+        healingCaseService.getStats({ event_id: activeEvent.id }),
       ]);
       setCases(casesRes.data.data || casesRes.data);
-      setEvents(eventsRes.data.data || eventsRes.data);
       setGroups(groupsRes.data.data || groupsRes.data);
       setStats(statsRes.data);
     } catch (error) {
@@ -68,11 +74,20 @@ export default function HealingCases() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      if (!activeEvent?.id) {
+        setMessage({ type: 'error', text: 'No active event. Activate an event first.' });
+        return;
+      }
+
+      const payload = {
+        ...formData,
+        event_id: activeEvent.id,
+      };
       if (editingCase) {
-        await healingCaseService.update(editingCase.id, formData);
+        await healingCaseService.update(editingCase.id, payload);
         setMessage({ type: 'success', text: 'Healing case updated' });
       } else {
-        await healingCaseService.create(formData);
+        await healingCaseService.create(payload);
         setMessage({ type: 'success', text: 'Healing case created' });
       }
       setShowModal(false);
@@ -115,13 +130,17 @@ export default function HealingCases() {
   };
 
   const openEditModal = (healingCase) => {
+    if (!activeEvent?.id) {
+      setMessage({ type: 'error', text: 'No active event. Activate an event first.' });
+      return;
+    }
     setEditingCase(healingCase);
     setFormData({
-      event_id: healingCase.event_id,
+      event_id: activeEvent.id,
       group_id: healingCase.group_id,
       person_name: healingCase.person_name,
       description: healingCase.description,
-      healing_date: healingCase.healing_date?.split('T')[0] || '',
+      healing_date: healingCase.healing_date,
       status: healingCase.status,
     });
     setShowModal(true);
@@ -164,16 +183,26 @@ export default function HealingCases() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Healing Cases</h1>
-          <p className="text-gray-500">Document and manage healing testimonies</p>
+          <p className="text-gray-500">
+            Document and manage healing testimonies
+            {activeEvent?.name ? ` • Active event: ${activeEvent.name}` : ''}
+          </p>
         </div>
         <button
           onClick={() => { resetForm(); setShowModal(true); }}
+          disabled={!activeEvent?.id}
           className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors font-medium"
         >
           <Plus className="w-4 h-4" />
           Add Case
         </button>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before managing healing cases.
+        </div>
+      )}
 
       {message.text && (
         <div className={`p-4 rounded-xl flex items-center gap-3 ${

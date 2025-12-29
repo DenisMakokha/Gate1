@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { userService } from '../services/api';
+import { workAllocationService } from '../services/api';
 import {
   Users,
   UserCheck,
@@ -15,23 +15,6 @@ import {
   MapPin,
 } from 'lucide-react';
 
-// Mock data - will be replaced with API calls
-const mockEditors = [
-  { id: 1, name: 'John Doe', email: 'john@gate1.com', group: 'Alpha', groupId: 1, isOnline: true, lastSeen: new Date(), currentActivity: 'Processing CAM-042', mediaAssigned: 45, mediaCompleted: 38, avgProcessingTime: 12 },
-  { id: 2, name: 'Jane Smith', email: 'jane@gate1.com', group: 'Alpha', groupId: 1, isOnline: true, lastSeen: new Date(), currentActivity: 'Idle', mediaAssigned: 30, mediaCompleted: 30, avgProcessingTime: 10 },
-  { id: 3, name: 'Mike Johnson', email: 'mike@gate1.com', group: 'Beta', groupId: 2, isOnline: false, lastSeen: new Date(Date.now() - 3600000), currentActivity: null, mediaAssigned: 50, mediaCompleted: 42, avgProcessingTime: 15 },
-  { id: 4, name: 'Sarah Wilson', email: 'sarah@gate1.com', group: 'Beta', groupId: 2, isOnline: true, lastSeen: new Date(), currentActivity: 'Uploading files', mediaAssigned: 25, mediaCompleted: 20, avgProcessingTime: 8 },
-  { id: 5, name: 'Tom Brown', email: 'tom@gate1.com', group: 'Alpha', groupId: 1, isOnline: false, lastSeen: new Date(Date.now() - 7200000), currentActivity: null, mediaAssigned: 60, mediaCompleted: 45, avgProcessingTime: 18 },
-  { id: 6, name: 'Emily Davis', email: 'emily@gate1.com', group: 'Gamma', groupId: 3, isOnline: true, lastSeen: new Date(), currentActivity: 'QA Review', mediaAssigned: 35, mediaCompleted: 32, avgProcessingTime: 11 },
-  { id: 7, name: 'Chris Lee', email: 'chris@gate1.com', group: 'Gamma', groupId: 3, isOnline: true, lastSeen: new Date(), currentActivity: 'Processing CAM-015', mediaAssigned: 40, mediaCompleted: 28, avgProcessingTime: 14 },
-  { id: 8, name: 'Anna Martinez', email: 'anna@gate1.com', group: 'Beta', groupId: 2, isOnline: false, lastSeen: new Date(Date.now() - 1800000), currentActivity: null, mediaAssigned: 20, mediaCompleted: 20, avgProcessingTime: 9 },
-];
-
-const mockGroups = [
-  { id: 1, name: 'Alpha Team', code: 'GRP-A', totalMedia: 135, completedMedia: 113, editorCount: 3 },
-  { id: 2, name: 'Beta Team', code: 'GRP-B', totalMedia: 95, completedMedia: 82, editorCount: 3 },
-  { id: 3, name: 'Gamma Team', code: 'GRP-C', totalMedia: 75, completedMedia: 60, editorCount: 2 },
-];
 
 
 function WorkloadBar({ assigned, completed, showNumbers = true }) {
@@ -161,53 +144,75 @@ function getTimeAgo(date) {
 }
 
 export default function WorkAllocation() {
-  const { isAdmin, isTeamLead, isGroupLeader } = useAuth();
-  const [editors, setEditors] = useState(mockEditors);
-  const [groups, setGroups] = useState(mockGroups);
-  const [loading, setLoading] = useState(false);
+  const { activeEvent, isAdmin, isTeamLead, isGroupLeader } = useAuth();
+  const [editors, setEditors] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filterGroup, setFilterGroup] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('workload'); // 'workload', 'name', 'group'
   const [isLive, setIsLive] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
+  const fetchData = useCallback(async () => {
+    if (!activeEvent?.id) {
+      setEditors([]);
+      setGroups([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await workAllocationService.getOverview(activeEvent.id);
+      // Map backend response to component state shape
+      const mappedEditors = (response.editors || []).map(e => ({
+        id: e.id,
+        name: e.name,
+        email: e.email,
+        group: e.groups?.[0]?.name || 'Unassigned',
+        groupId: e.groups?.[0]?.id || null,
+        isOnline: e.is_online,
+        lastSeen: e.last_seen_at,
+        currentActivity: e.current_activity,
+        mediaAssigned: e.media_assigned || 0,
+        mediaCompleted: e.media_completed || 0,
+        avgProcessingTime: e.avg_processing_time || 0,
+      }));
+      const mappedGroups = (response.groups || []).map(g => ({
+        id: g.id,
+        name: g.name,
+        code: g.code,
+        totalMedia: g.total_media || 0,
+        completedMedia: g.completed_media || 0,
+        editorCount: g.editor_count || 0,
+      }));
+      setEditors(mappedEditors);
+      setGroups(mappedGroups);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Failed to fetch work allocation:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeEvent?.id]);
+
+  // Initial load
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   // Real-time polling - fetch data every 5 seconds
   useEffect(() => {
     let interval;
-    
-    const fetchData = async () => {
-      try {
-        // In production, this would call: workAllocationService.getOverview()
-        // For now, simulate real-time changes
-        setEditors(prev => prev.map(editor => {
-          // Simulate random status changes for demo
-          const shouldToggle = Math.random() < 0.1; // 10% chance of status change
-          const workChange = Math.random() < 0.2 ? (Math.random() > 0.5 ? 1 : -1) : 0;
-          
-          return {
-            ...editor,
-            isOnline: shouldToggle ? !editor.isOnline : editor.isOnline,
-            lastSeen: editor.isOnline ? new Date() : editor.lastSeen,
-            mediaCompleted: Math.max(0, Math.min(editor.mediaAssigned, editor.mediaCompleted + workChange)),
-            currentActivity: editor.isOnline 
-              ? ['Processing files', 'Uploading', 'Idle', 'QA Review', 'Syncing'][Math.floor(Math.random() * 5)]
-              : null,
-          };
-        }));
-        setLastUpdated(new Date());
-      } catch (error) {
-        console.error('Failed to fetch team status:', error);
-      }
-    };
-
-    if (isLive) {
-      interval = setInterval(fetchData, 5000); // Poll every 5 seconds
+    if (isLive && activeEvent?.id) {
+      interval = setInterval(fetchData, 5000);
     }
-
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isLive]);
+  }, [isLive, activeEvent?.id, fetchData]);
+
+  const canView = !!activeEvent?.id;
 
   // Filter and sort editors
   const filteredEditors = editors
@@ -237,13 +242,24 @@ export default function WorkAllocation() {
 
   const refresh = async () => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
+    await fetchData();
   };
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Work Allocation</h1>
+        <p className="text-gray-500">
+          Assign and balance editor workloads
+          {activeEvent?.name ? ` • Active event: ${activeEvent.name}` : ''}
+        </p>
+      </div>
+
+      {!canView && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before managing work allocation.
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">

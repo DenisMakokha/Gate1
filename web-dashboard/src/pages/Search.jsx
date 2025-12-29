@@ -328,7 +328,7 @@ function PlaybackModal({ media, onClose, canDownload, onDownload, user }) {
 
 // Main Search Component
 export default function Search() {
-  const { user, isAdmin, isTeamLead, isGroupLeader, isQA, isQALead } = useAuth();
+  const { user, activeEvent, isAdmin, isTeamLead, isGroupLeader, isQA, isQALead } = useAuth();
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [playbackMedia, setPlaybackMedia] = useState(null);
@@ -355,7 +355,6 @@ export default function Search() {
     region: '',
     camera_number: '',
     sd_label: '',
-    event_id: '',
     editor_id: '',
     group_id: '',
     issue_type: '',
@@ -371,6 +370,12 @@ export default function Search() {
   // Search handler
   const handleSearch = async (e) => {
     e?.preventDefault();
+    if (!activeEvent?.id) {
+      setResults([]);
+      setPagination({ current_page: 1, last_page: 1, total: 0 });
+      setSearched(true);
+      return;
+    }
     setLoading(true);
     setSearched(true);
 
@@ -390,7 +395,7 @@ export default function Search() {
         if (filters.issue_status) params.issue_status = filters.issue_status;
         if (filters.camera_number) params.camera_number = filters.camera_number;
         if (filters.sd_label) params.sd_label = filters.sd_label;
-        if (filters.event_id) params.event_id = filters.event_id;
+        // event is enforced below
         params.has_issues = true; // Force issue-only results
       }
       // Group Leader: Group + issue scoped
@@ -400,6 +405,8 @@ export default function Search() {
         if (filters.camera_number) params.camera_number = filters.camera_number;
         params.my_groups = true; // API will scope to leader's groups
       }
+
+      params.event_id = activeEvent.id;
 
       const response = await mediaService.search(params);
       setResults(response.data || []);
@@ -459,7 +466,18 @@ export default function Search() {
             : 'Search indexed media'
           }
         </p>
+        {activeEvent?.name ? (
+          <p className="text-sm text-gray-500 mt-1">
+            Active event: <span className="font-medium text-blue-600">{activeEvent.name}</span>
+          </p>
+        ) : null}
       </div>
+
+      {!activeEvent?.id && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+          You must activate an event before searching media.
+        </div>
+      )}
 
       {/* Role Notice */}
       {isQARole && (
@@ -637,7 +655,7 @@ export default function Search() {
               type="button"
               onClick={() => setFilters({
                 full_name: '', age: '', condition: '', region: '',
-                camera_number: '', sd_label: '', event_id: '', editor_id: '',
+                camera_number: '', sd_label: '', editor_id: '',
                 group_id: '', issue_type: '', issue_status: '', backup_status: '',
                 date_from: '', date_to: '', page: 1
               })}
@@ -647,7 +665,7 @@ export default function Search() {
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !activeEvent?.id}
               className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               <SearchIcon className="w-4 h-4" />

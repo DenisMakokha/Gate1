@@ -114,7 +114,7 @@ function GroupsHealth({ groups }) {
 }
 
 export default function Dashboard() {
-  const { user, isAdmin, isTeamLead, isGroupLeader, isQALead, isQA, isBackupLead, isBackup } = useAuth();
+  const { user, activeEvent, isAdmin, isTeamLead, isGroupLeader, isQALead, isQA, isBackupLead, isBackup } = useAuth();
   const toast = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -173,15 +173,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [activeEvent?.id]);
 
   const loadDashboard = async () => {
     try {
       let response;
       if (isAdmin()) {
-        response = await dashboardService.getAdmin();
+        response = await dashboardService.getAdmin(activeEvent?.id);
       } else if (isTeamLead()) {
-        response = await dashboardService.getAdmin();
+        response = await dashboardService.getAdmin(activeEvent?.id);
       } else if (isGroupLeader()) {
         response = await dashboardService.getGroupLeader();
       } else if (isQALead() || isQA()) {

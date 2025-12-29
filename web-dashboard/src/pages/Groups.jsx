@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { groupService, eventService, userService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { groupService, userService } from '../services/api';
 import { Plus, Users, AlertTriangle, CheckCircle, ChevronRight, X, UserPlus } from 'lucide-react';
 
 export default function Groups() {
+  const { activeEvent } = useAuth();
   const [groups, setGroups] = useState([]);
-  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -15,22 +16,17 @@ export default function Groups() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    event_id: '',
     leader_phone: '',
   });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeEvent?.id]);
 
   const loadData = async () => {
     try {
-      const [groupsRes, eventsRes] = await Promise.all([
-        groupService.getAll(),
-        eventService.getActive(),
-      ]);
+      const groupsRes = await groupService.getAll({ event_id: activeEvent?.id });
       setGroups(groupsRes.data || []);
-      setEvents(eventsRes || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -41,9 +37,16 @@ export default function Groups() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await groupService.create(formData);
+      if (!activeEvent?.id) {
+        console.error('No active event set; cannot create group');
+        return;
+      }
+      await groupService.create({
+        ...formData,
+        event_id: activeEvent.id,
+      });
       setShowModal(false);
-      setFormData({ name: '', description: '', event_id: '', leader_phone: '' });
+      setFormData({ name: '', description: '', leader_phone: '' });
       loadData();
     } catch (error) {
       console.error('Failed to create group:', error);
@@ -101,10 +104,14 @@ export default function Groups() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Groups</h1>
-          <p className="text-gray-500">Manage editor groups and team leaders</p>
+          <p className="text-gray-500">
+            Manage editor groups and team leaders
+            {activeEvent?.name ? ` • Active event: ${activeEvent.name}` : ''}
+          </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
+          disabled={!activeEvent?.id}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
           <Plus className="w-5 h-5" />
@@ -243,21 +250,12 @@ export default function Groups() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl w-full max-w-md p-6 m-4">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Create New Group</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event</label>
-                <select
-                  value={formData.event_id}
-                  onChange={(e) => setFormData({ ...formData, event_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select Event</option>
-                  {events.map((event) => (
-                    <option key={event.id} value={event.id}>{event.name}</option>
-                  ))}
-                </select>
+            {!activeEvent?.id && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                You must activate an event before creating groups.
               </div>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
                 <input
@@ -298,6 +296,7 @@ export default function Groups() {
                 </button>
                 <button
                   type="submit"
+                  disabled={!activeEvent?.id}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   Create Group

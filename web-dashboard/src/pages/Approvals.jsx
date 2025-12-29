@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { registrationService, groupService } from '../services/api';
 import {
   UserPlus,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function Approvals() {
+  const { activeEvent } = useAuth();
   const [pendingUsers, setPendingUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,14 +40,14 @@ export default function Approvals() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeEvent?.id]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [usersRes, groupsRes] = await Promise.all([
         registrationService.getPending(),
-        groupService.getAll(),
+        groupService.getAll({ event_id: activeEvent?.id }),
       ]);
       setPendingUsers(usersRes.data.data || usersRes.data);
       setGroups(groupsRes.data.data || groupsRes.data);
@@ -165,6 +167,12 @@ export default function Approvals() {
           >
             ×
           </button>
+        </div>
+      )}
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          No active event. You can review registrations, but group assignment will be unavailable until an event is activated.
         </div>
       )}
 

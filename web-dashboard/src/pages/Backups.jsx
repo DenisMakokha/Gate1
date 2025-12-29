@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { backupService } from '../services/api';
 import { HardDrive, CheckCircle, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function Backups() {
+  const { activeEvent } = useAuth();
   const [coverage, setCoverage] = useState(null);
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeEvent?.id]);
 
   const loadData = async () => {
     try {
+      if (!activeEvent?.id) {
+        setCoverage(null);
+        setPending([]);
+        return;
+      }
       const [coverageRes, pendingRes] = await Promise.all([
-        backupService.getCoverage(),
-        backupService.getPending({ per_page: 50 }),
+        backupService.getCoverage(activeEvent.id),
+        backupService.getPending({ per_page: 50, event_id: activeEvent.id }),
       ]);
       setCoverage(coverageRes);
       setPending(pendingRes.data || []);
@@ -47,16 +54,26 @@ export default function Backups() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Backup Management</h1>
-          <p className="text-gray-500">Monitor backup coverage and verification status</p>
+          <p className="text-gray-500">
+            Monitor backup coverage and verification status
+            {activeEvent?.name ? ` • Active event: ${activeEvent.name}` : ''}
+          </p>
         </div>
         <button
           onClick={loadData}
+          disabled={!activeEvent?.id}
           className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50"
         >
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before viewing backup operations.
+        </div>
+      )}
 
       {/* Coverage Stats */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">

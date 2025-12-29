@@ -150,7 +150,7 @@ function CameraHealthCard({ camera }) {
 }
 
 export default function LiveOperations() {
-  const { isAdmin, isTeamLead, isGroupLeader } = useAuth();
+  const { activeEvent, isAdmin, isTeamLead, isGroupLeader } = useAuth();
   const [isLive, setIsLive] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -167,55 +167,37 @@ export default function LiveOperations() {
     }
   });
 
-  // Mock data for development - replace with real API
-  const mockData = {
-    activeSessions: [
-      { id: 1, camera_number: '1', sd_label: 'A', event_name: 'Healing Conference 2024', editor_name: 'John Doe', group_code: 'GRP-A1', files_total: 45, files_copied: 32, files_pending: 13, status: 'active', started_at: new Date(Date.now() - 1800000) },
-      { id: 2, camera_number: '2', sd_label: 'B', event_name: 'Healing Conference 2024', editor_name: 'Jane Smith', group_code: 'GRP-A1', files_total: 28, files_copied: 28, files_pending: 0, status: 'completed', started_at: new Date(Date.now() - 3600000) },
-      { id: 3, camera_number: '3', sd_label: 'A', event_name: 'Healing Conference 2024', editor_name: 'Mike Wilson', group_code: 'GRP-B2', files_total: 56, files_copied: 10, files_pending: 46, status: 'active', started_at: new Date(Date.now() - 600000) },
-    ],
-    earlyRemovals: [
-      { id: 1, camera_number: '5', sd_label: 'A', files_pending: 12, editor_name: 'Alex Brown', removed_at: new Date(Date.now() - 7200000) },
-    ],
-    cameraHealth: [
-      { camera_number: '1', health_score: 95, open_issues: 0 },
-      { camera_number: '2', health_score: 88, open_issues: 1 },
-      { camera_number: '3', health_score: 72, open_issues: 2 },
-      { camera_number: '4', health_score: 45, open_issues: 5 },
-      { camera_number: '5', health_score: 92, open_issues: 0 },
-    ],
-    stats: {
-      totalActiveSessions: 3,
-      editorsOnline: 8,
-      camerasHealthy: 4,
-      camerasAttention: 1,
-      earlyRemovalsToday: 1,
-    }
-  };
-
   const fetchData = useCallback(async () => {
     try {
-      // In production: const response = await dashboardService.getLiveOperations();
-      // Simulate real-time changes
-      setData(prev => {
-        const sessions = [...mockData.activeSessions].map(s => ({
-          ...s,
-          files_copied: s.status === 'active' 
-            ? Math.min(s.files_total, s.files_copied + Math.floor(Math.random() * 3))
-            : s.files_copied,
-          files_pending: s.status === 'active'
-            ? Math.max(0, s.files_total - s.files_copied - Math.floor(Math.random() * 3))
-            : s.files_pending,
-        }));
-        
-        return {
-          ...mockData,
-          activeSessions: sessions,
+      if (!activeEvent?.id) {
+        setData({
+          activeSessions: [],
+          earlyRemovals: [],
+          cameraHealth: [],
           stats: {
-            ...mockData.stats,
-            totalActiveSessions: sessions.filter(s => s.status === 'active').length,
+            totalActiveSessions: 0,
+            editorsOnline: 0,
+            camerasHealthy: 0,
+            camerasAttention: 0,
+            earlyRemovalsToday: 0,
           }
-        };
+        });
+        setLoading(false);
+        return;
+      }
+
+      const response = await dashboardService.getLiveOperations(activeEvent.id);
+      setData({
+        activeSessions: response.activeSessions || [],
+        earlyRemovals: response.earlyRemovals || [],
+        cameraHealth: response.cameraHealth || [],
+        stats: response.stats || {
+          totalActiveSessions: 0,
+          editorsOnline: 0,
+          camerasHealthy: 0,
+          camerasAttention: 0,
+          earlyRemovalsToday: 0,
+        }
       });
       setLastUpdated(new Date());
     } catch (error) {
@@ -223,7 +205,7 @@ export default function LiveOperations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeEvent?.id]);
 
   // Initial load
   useEffect(() => {
@@ -267,6 +249,11 @@ export default function LiveOperations() {
           <p className="text-gray-500">
             Real-time SD sessions and camera activity • Updated: {lastUpdated.toLocaleTimeString()}
           </p>
+          {activeEvent?.name ? (
+            <p className="text-sm text-gray-500 mt-1">
+              Active event: <span className="font-medium text-blue-600">{activeEvent.name}</span>
+            </p>
+          ) : null}
         </div>
         <button
           onClick={() => setIsLive(!isLive)}
@@ -280,6 +267,12 @@ export default function LiveOperations() {
           {isLive ? 'Live Updates On' : 'Live Updates Off'}
         </button>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+          You must activate an event before viewing live operations.
+        </div>
+      )}
 
       {/* Quick Stats - Signals, not metrics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

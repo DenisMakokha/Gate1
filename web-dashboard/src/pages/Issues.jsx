@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { issueService } from '../services/api';
 import { AlertTriangle, CheckCircle, Clock, ArrowUp, Eye, MessageSquare, Play, X, Video } from 'lucide-react';
 
@@ -82,6 +83,7 @@ function IssuePlaybackModal({ issue, onClose }) {
 }
 
 export default function Issues() {
+  const { activeEvent } = useAuth();
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('open');
@@ -91,11 +93,18 @@ export default function Issues() {
 
   useEffect(() => {
     loadIssues();
-  }, [filter]);
+  }, [filter, activeEvent?.id]);
 
   const loadIssues = async () => {
     try {
-      const response = await issueService.getAll({ status: filter !== 'all' ? filter : undefined });
+      if (!activeEvent?.id) {
+        setIssues([]);
+        return;
+      }
+      const response = await issueService.getAll({
+        event_id: activeEvent.id,
+        status: filter !== 'all' ? filter : undefined,
+      });
       setIssues(response.data || []);
     } catch (error) {
       console.error('Failed to load issues:', error);
@@ -172,8 +181,17 @@ export default function Issues() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Issues</h1>
-        <p className="text-gray-500">Quality issues and resolution tracking</p>
+        <p className="text-gray-500">
+          Quality issues and resolution tracking
+          {activeEvent?.name ? ` • Active event: ${activeEvent.name}` : ''}
+        </p>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before viewing issues.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">

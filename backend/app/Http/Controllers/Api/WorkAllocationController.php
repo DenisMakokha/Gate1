@@ -7,12 +7,23 @@ use App\Models\User;
 use App\Models\Group;
 use App\Models\Media;
 use App\Models\AuditLog;
+use App\Models\Event;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class WorkAllocationController extends Controller
 {
+    private function resolveEventId(Request $request): ?int
+    {
+        $eventId = $request->get('event_id');
+        if ($eventId) {
+            return (int) $eventId;
+        }
+
+        $active = Event::where('status', 'active')->orderByDesc('start_date')->first();
+        return $active?->id;
+    }
     /**
      * Get workload overview with editor status
      */
@@ -24,11 +35,22 @@ class WorkAllocationController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        $eventId = $this->resolveEventId($request);
+        if (!$eventId) {
+            return response()->json([
+                'error' => 'No active event. Activate an event before viewing work allocation.',
+                'code' => 'NO_ACTIVE_EVENT',
+            ], 409);
+        }
+
         // Get editors with their workload
         $editorsQuery = User::with(['roles', 'groups'])
             ->whereHas('roles', function ($q) {
                 $q->where('slug', 'editor');
             });
+
+        // Always scope to editors in groups for this event
+        $editorsQuery->whereHas('groups', fn($q) => $q->where('groups.event_id', $eventId));
 
         // Group leaders can only see their group's editors
         if ($authUser->isGroupLeader() && !$authUser->hasOperationalAccess()) {
@@ -38,10 +60,10 @@ class WorkAllocationController extends Controller
             });
         }
 
-        $editors = $editorsQuery->get()->map(function ($editor) {
+        $editors = $editorsQuery->get()->map(function ($editor) use ($eventId) {
             // Calculate workload stats
-            $mediaAssigned = Media::where('assigned_to', $editor->id)->count();
-            $mediaCompleted = Media::where('assigned_to', $editor->id)
+            $mediaAssigned = Media::where('event_id', $eventId)->where('assigned_to', $editor->id)->count();
+            $mediaCompleted = Media::where('event_id', $eventId)->where('assigned_to', $editor->id)
                 ->whereIn('status', ['completed', 'verified', 'backed_up'])
                 ->count();
             
@@ -73,17 +95,17 @@ class WorkAllocationController extends Controller
         });
 
         // Get group workload summary
-        $groupsQuery = Group::withCount(['members']);
+        $groupsQuery = Group::withCount(['members'])->where('event_id', $eventId);
         
         if ($authUser->isGroupLeader() && !$authUser->hasOperationalAccess()) {
             $groupsQuery->where('leader_id', $authUser->id);
         }
 
-        $groups = $groupsQuery->get()->map(function ($group) {
+        $groups = $groupsQuery->get()->map(function ($group) use ($eventId) {
             $memberIds = $group->members()->pluck('users.id')->toArray();
             
-            $totalMedia = Media::whereIn('assigned_to', $memberIds)->count();
-            $completedMedia = Media::whereIn('assigned_to', $memberIds)
+            $totalMedia = Media::where('event_id', $eventId)->whereIn('assigned_to', $memberIds)->count();
+            $completedMedia = Media::where('event_id', $eventId)->whereIn('assigned_to', $memberIds)
                 ->whereIn('status', ['completed', 'verified', 'backed_up'])
                 ->count();
 
@@ -102,7 +124,8 @@ class WorkAllocationController extends Controller
         });
 
         // Get unassigned media
-        $unassignedMedia = Media::whereNull('assigned_to')
+        $unassignedMedia = Media::where('event_id', $eventId)
+            ->whereNull('assigned_to')
             ->where('status', 'pending')
             ->orderBy('created_at', 'desc')
             ->limit(50)
@@ -110,9 +133,9 @@ class WorkAllocationController extends Controller
             ->map(fn($m) => [
                 'id' => $m->id,
                 'filename' => $m->filename,
-                'camera' => $m->camera?->camera_id ?? 'Unknown',
-                'duration' => $m->duration ?? '0:00',
-                'size' => $this->formatBytes($m->file_size ?? 0),
+                'camera' => $m->camera_number ? ('CAM-' . str_pad((string) $m->camera_number, 3, '0', STR_PAD_LEFT)) : 'Unknown',
+                'duration' => '0:00',
+                'size' => $this->formatBytes($m->size_bytes ?? 0),
                 'created_at' => $m->created_at,
             ]);
 
@@ -130,6 +153,7 @@ class WorkAllocationController extends Controller
             'groups' => $groups,
             'unassigned_media' => $unassignedMedia,
             'stats' => $stats,
+            'event_id' => $eventId,
         ]);
     }
 

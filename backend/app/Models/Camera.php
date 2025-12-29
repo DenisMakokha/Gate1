@@ -12,11 +12,33 @@ class Camera extends Model
 
     protected $fillable = [
         'camera_number',
+        'camera_id',
         'name',
         'description',
         'status',
         'health_score',
+        'group_id',
+        'event_id',
+        'model',
+        'serial_number',
+        'notes',
+        'current_sd_card_id',
     ];
+
+    public function event()
+    {
+        return $this->belongsTo(Event::class);
+    }
+
+    public function group()
+    {
+        return $this->belongsTo(Group::class);
+    }
+
+    public function currentSdCard()
+    {
+        return $this->belongsTo(SdCard::class, 'current_sd_card_id');
+    }
 
     public function sdCards()
     {

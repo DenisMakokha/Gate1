@@ -65,6 +65,10 @@ export default function QualityControl() {
   const loadData = async () => {
     try {
       setLoading(true);
+      if (!activeEvent?.id) {
+        setData(null);
+        return;
+      }
       const response = await qualityControlService.getOverview(activeEvent?.id);
       setData(response);
     } catch (error) {
@@ -100,13 +104,19 @@ export default function QualityControl() {
         </div>
         <button
           onClick={loadData}
-          disabled={loading}
+          disabled={loading || !activeEvent?.id}
           className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before viewing Quality Control.
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

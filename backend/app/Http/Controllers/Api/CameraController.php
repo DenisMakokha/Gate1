@@ -5,14 +5,44 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Camera;
 use App\Models\AuditLog;
+use App\Models\Event;
+use App\Models\Group;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class CameraController extends Controller
 {
+    protected function resolveEventId(Request $request): ?int
+    {
+        $eventId = $request->get('event_id');
+        if ($eventId) {
+            return (int) $eventId;
+        }
+
+        $active = Event::where('status', 'active')->orderByDesc('start_date')->first();
+        return $active?->id;
+    }
+
+    protected function cameraNumberFromCameraId(string $cameraId): ?int
+    {
+        if (preg_match('/(\d+)/', $cameraId, $m)) {
+            return (int) $m[1];
+        }
+        return null;
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $query = Camera::with(['group', 'currentSdCard']);
+        $eventId = $this->resolveEventId($request);
+        if (!$eventId) {
+            return response()->json([
+                'error' => 'No active event. Activate an event before viewing cameras.',
+                'code' => 'NO_ACTIVE_EVENT',
+            ], 409);
+        }
+
+        $query = Camera::with(['group', 'currentSdCard'])
+            ->where('event_id', $eventId);
 
         if ($request->has('group_id')) {
             $query->where('group_id', $request->group_id);
@@ -52,7 +82,27 @@ class CameraController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $camera = Camera::create($validated);
+        $group = Group::with('event')->findOrFail($validated['group_id']);
+        $eventId = $group->event_id;
+
+        $cameraNumber = $this->cameraNumberFromCameraId($validated['camera_id']);
+        if (!$cameraNumber) {
+            return response()->json([
+                'error' => 'Invalid camera_id. Must contain a numeric camera number (e.g. CAM-001).',
+                'code' => 'INVALID_CAMERA_ID',
+            ], 422);
+        }
+
+        $camera = Camera::create([
+            'camera_id' => $validated['camera_id'],
+            'camera_number' => $cameraNumber,
+            'group_id' => $validated['group_id'],
+            'event_id' => $eventId,
+            'model' => $validated['model'] ?? null,
+            'serial_number' => $validated['serial_number'] ?? null,
+            'status' => $validated['status'] ?? 'active',
+            'notes' => $validated['notes'] ?? null,
+        ]);
 
         AuditLog::log('camera_created', 'Camera', $camera->id, null, $camera->toArray());
 
@@ -84,6 +134,22 @@ class CameraController extends Controller
             'status' => 'nullable|in:active,inactive,maintenance',
             'notes' => 'nullable|string',
         ]);
+
+        if (array_key_exists('group_id', $validated)) {
+            $group = Group::findOrFail($validated['group_id']);
+            $validated['event_id'] = $group->event_id;
+        }
+
+        if (array_key_exists('camera_id', $validated)) {
+            $cameraNumber = $this->cameraNumberFromCameraId($validated['camera_id']);
+            if (!$cameraNumber) {
+                return response()->json([
+                    'error' => 'Invalid camera_id. Must contain a numeric camera number (e.g. CAM-001).',
+                    'code' => 'INVALID_CAMERA_ID',
+                ], 422);
+            }
+            $validated['camera_number'] = $cameraNumber;
+        }
 
         $oldData = $camera->toArray();
         $camera->update($validated);
@@ -146,13 +212,22 @@ class CameraController extends Controller
 
     public function getStats(): JsonResponse
     {
+        $eventId = $this->resolveEventId(request());
+        if (!$eventId) {
+            return response()->json([
+                'error' => 'No active event. Activate an event before viewing cameras.',
+                'code' => 'NO_ACTIVE_EVENT',
+            ], 409);
+        }
+
+        $base = Camera::where('event_id', $eventId);
         $stats = [
-            'total' => Camera::count(),
-            'active' => Camera::where('status', 'active')->count(),
-            'inactive' => Camera::where('status', 'inactive')->count(),
-            'maintenance' => Camera::where('status', 'maintenance')->count(),
-            'with_sd_card' => Camera::whereNotNull('current_sd_card_id')->count(),
-            'without_sd_card' => Camera::whereNull('current_sd_card_id')->count(),
+            'total' => (clone $base)->count(),
+            'active' => (clone $base)->where('status', 'active')->count(),
+            'inactive' => (clone $base)->where('status', 'inactive')->count(),
+            'maintenance' => (clone $base)->where('status', 'maintenance')->count(),
+            'with_sd_card' => (clone $base)->whereNotNull('current_sd_card_id')->count(),
+            'without_sd_card' => (clone $base)->whereNull('current_sd_card_id')->count(),
         ];
 
         return response()->json($stats);

@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
       ]).then(([userRes, eventRes]) => {
         setUser(userRes.user);
         localStorage.setItem('user', JSON.stringify(userRes.user));
-        setActiveEvent(eventRes.event || eventRes.data || null);
+        setActiveEvent(eventRes?.event || null);
       }).catch(() => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -36,8 +36,8 @@ export function AuthProvider({ children }) {
   const refreshActiveEvent = async () => {
     try {
       const response = await eventService.getActive();
-      setActiveEvent(response.event || response.data || null);
-      return response.event || response.data || null;
+      setActiveEvent(response?.event || null);
+      return response?.event || null;
     } catch (e) {
       setActiveEvent(null);
       return null;
@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', response.authorization.token);
     localStorage.setItem('user', JSON.stringify(response.user));
     setUser(response.user);
+    await refreshActiveEvent();
     return response;
   };
 

@@ -166,7 +166,7 @@ export const cameraService = {
   create: (data) => api.post('/cameras', data),
   update: (id, data) => api.put(`/cameras/${id}`, data),
   delete: (id) => api.delete(`/cameras/${id}`),
-  getStats: () => api.get('/cameras/stats'),
+  getStats: (params) => api.get('/cameras/stats', { params }),
   bindSdCard: (id, sdCardId) => api.post(`/cameras/${id}/bind-sd`, { sd_card_id: sdCardId }),
   unbindSdCard: (id) => api.post(`/cameras/${id}/unbind-sd`),
 };
@@ -177,7 +177,7 @@ export const healingCaseService = {
   create: (data) => api.post('/healing-cases', data),
   update: (id, data) => api.put(`/healing-cases/${id}`, data),
   delete: (id) => api.delete(`/healing-cases/${id}`),
-  getStats: () => api.get('/healing-cases/stats'),
+  getStats: (params) => api.get('/healing-cases/stats', { params }),
   verify: (id) => api.post(`/healing-cases/${id}/verify`),
   publish: (id) => api.post(`/healing-cases/${id}/publish`),
 };
@@ -218,7 +218,7 @@ export const mediaDeletionService = {
 };
 
 export const workAllocationService = {
-  getOverview: () => api.get('/work-allocation/overview'),
+  getOverview: (eventId) => api.get('/work-allocation/overview', { params: { event_id: eventId } }),
   assign: (editorId, mediaIds) => api.post('/work-allocation/assign', { editor_id: editorId, media_ids: mediaIds }),
   autoDistribute: (params) => api.post('/work-allocation/auto-distribute', params),
   reassign: (fromEditorId, toEditorId, mediaIds) => api.post('/work-allocation/reassign', {

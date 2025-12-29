@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { cameraService, groupService } from '../services/api';
 import {
   Camera,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function Cameras() {
+  const { activeEvent } = useAuth();
   const [cameras, setCameras] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,15 +39,21 @@ export default function Cameras() {
 
   useEffect(() => {
     loadData();
-  }, [search, statusFilter]);
+  }, [search, statusFilter, activeEvent?.id]);
 
   const loadData = async () => {
     setLoading(true);
     try {
+      if (!activeEvent?.id) {
+        setCameras([]);
+        setGroups([]);
+        setStats(null);
+        return;
+      }
       const [camerasRes, groupsRes, statsRes] = await Promise.all([
-        cameraService.getAll({ search, status: statusFilter }),
-        groupService.getAll(),
-        cameraService.getStats(),
+        cameraService.getAll({ event_id: activeEvent.id, search, status: statusFilter }),
+        groupService.getAll({ event_id: activeEvent.id }),
+        cameraService.getStats({ event_id: activeEvent.id }),
       ]);
       setCameras(camerasRes.data.data || camerasRes.data);
       setGroups(groupsRes.data.data || groupsRes.data);
@@ -130,16 +138,26 @@ export default function Cameras() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Cameras</h1>
-          <p className="text-gray-500">Manage cameras and SD card bindings</p>
+          <p className="text-gray-500">
+            Manage cameras and SD card bindings
+            {activeEvent?.name ? ` • Active event: ${activeEvent.name}` : ''}
+          </p>
         </div>
         <button
           onClick={() => { resetForm(); setShowModal(true); }}
+          disabled={!activeEvent?.id}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
         >
           <Plus className="w-4 h-4" />
           Add Camera
         </button>
       </div>
+
+      {!activeEvent?.id && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You must activate an event before managing cameras.
+        </div>
+      )}
 
       {message.text && (
         <div className={`p-4 rounded-xl flex items-center gap-3 ${
