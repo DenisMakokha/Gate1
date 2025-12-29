@@ -156,12 +156,21 @@ class DashboardController extends Controller
             ? round(($groupVerifiedMedia / $groupTotalMedia) * 100)
             : 0;
 
+        $activeSessions = CameraSession::where('status', 'active')
+            ->when($eventId, fn($q) => $q->where('event_id', $eventId))
+            ->whereIn('editor_id', $memberIds)
+            ->count();
+
         return response()->json([
             'groups' => $groups->map(fn($g) => [
                 'id' => $g->id,
                 'code' => $g->group_code,
                 'name' => $g->name,
                 'member_count' => $g->members->count(),
+                'online_count' => Agent::whereIn('user_id', $g->members->pluck('id'))
+                    ->where('status', 'active')
+                    ->where('last_seen_at', '>', now()->subMinutes(2))
+                    ->count(),
                 'open_issues' => $g->open_issues,
                 'resolved_today' => $g->resolved_today,
             ]),
@@ -171,6 +180,7 @@ class DashboardController extends Controller
                     ->where('status', 'active')
                     ->where('last_seen_at', '>', now()->subMinutes(2))
                     ->count(),
+                'active_sessions' => $activeSessions,
                 'media_today' => Media::whereIn('editor_id', $memberIds)
                     ->whereDate('created_at', today())
                     ->count(),
@@ -181,7 +191,14 @@ class DashboardController extends Controller
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->orderByDesc('created_at')
                 ->limit(10)
-                ->get(),
+                ->get()
+                ->map(fn($i) => [
+                    'id' => $i->issue_id,
+                    'type' => $i->type,
+                    'severity' => $i->severity,
+                    'reporter' => $i->reporter?->name,
+                    'created_at' => $i->created_at,
+                ]),
         ]);
     }
 
