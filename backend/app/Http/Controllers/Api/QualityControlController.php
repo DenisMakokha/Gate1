@@ -20,7 +20,7 @@ class QualityControlController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isQA() && !$user->isGroupLeader()) {
+        if (!$user->isAdmin() && !$user->isQA() && !$user->isQALead() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -88,7 +88,7 @@ class QualityControlController extends Controller
             ->groupBy('editor_id', 'parse_status');
 
         // Group leaders only see their editors
-        if (!$user->isAdmin() && !$user->isQA()) {
+        if (!$user->isAdmin() && !$user->isQA() && !$user->isQALead()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $editorIds = User::whereHas('groups', fn($q) => $q->whereIn('groups.id', $groupIds))->pluck('id');
             $query->whereIn('editor_id', $editorIds);
@@ -149,7 +149,7 @@ class QualityControlController extends Controller
     {
         $query = Group::query();
 
-        if (!$user->isAdmin() && !$user->isQA()) {
+        if (!$user->isAdmin() && !$user->isQA() && !$user->isQALead()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $query->whereIn('id', $groupIds);
         }
@@ -304,7 +304,7 @@ class QualityControlController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isQA() && !$user->isGroupLeader()) {
+        if (!$user->isAdmin() && !$user->isQA() && !$user->isQALead() && !$user->isGroupLeader()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -331,7 +331,7 @@ class QualityControlController extends Controller
         $editor = User::findOrFail($editorId);
 
         // Check authorization
-        if (!$user->isAdmin() && !$user->isQA()) {
+        if (!$user->isAdmin() && !$user->isQA() && !$user->isQALead()) {
             $groupIds = $user->ledGroups()->pluck('id');
             $editorGroupIds = $editor->groups()->pluck('groups.id');
             if ($groupIds->intersect($editorGroupIds)->isEmpty()) {

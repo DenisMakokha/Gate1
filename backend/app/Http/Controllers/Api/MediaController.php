@@ -166,12 +166,31 @@ class MediaController extends Controller
     {
         $user = auth('api')->user();
 
-        // Only admins can do global search
-        if (!$user->isAdmin()) {
+        $canFullSearch = $user->hasOperationalAccess();
+        $isQaRole = $user->isQA() || $user->isQALead();
+        $isGroupLeader = $user->isGroupLeader();
+
+        if (!$canFullSearch && !$isQaRole && !$isGroupLeader) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        $query = Media::query()->with(['editor', 'issues']);
+        // Non-operational roles must be scoped to an event
+        if (!$canFullSearch && !$request->filled('event_id')) {
+            return response()->json(['error' => 'event_id is required'], 422);
+        }
+
+        $query = Media::query()->with(['editor', 'issues', 'sdCard']);
+
+        // QA: issue-only search
+        if ($isQaRole && !$canFullSearch) {
+            $query->whereHas('issues');
+        }
+
+        // Group leader: restrict to their groups if requested (frontend uses my_groups=true)
+        if ($isGroupLeader && !$canFullSearch && filter_var($request->get('my_groups'), FILTER_VALIDATE_BOOLEAN)) {
+            $groupIds = $user->ledGroups()->pluck('id');
+            $query->whereIn('group_id', $groupIds);
+        }
 
         if ($request->filled('full_name')) {
             $query->where('full_name', 'like', '%' . $request->full_name . '%');
@@ -187,6 +206,23 @@ class MediaController extends Controller
 
         if ($request->filled('event_id')) {
             $query->where('event_id', $request->event_id);
+        }
+
+        if ($request->filled('camera_number')) {
+            $query->where('camera_number', $request->camera_number);
+        }
+
+        if ($request->filled('sd_label')) {
+            $sdLabel = $request->sd_label;
+            $query->whereHas('sdCard', fn($q) => $q->where('sd_label', 'like', "%{$sdLabel}%"));
+        }
+
+        if ($request->filled('issue_type')) {
+            $query->whereHas('issues', fn($q) => $q->where('type', $request->issue_type));
+        }
+
+        if ($request->filled('issue_status')) {
+            $query->whereHas('issues', fn($q) => $q->where('status', $request->issue_status));
         }
 
         if ($request->filled('status')) {
@@ -215,6 +251,23 @@ class MediaController extends Controller
         AuditLog::log('media.search', $user, null, null, null, [
             'filters' => $request->only(['full_name', 'condition', 'region', 'event_id']),
         ]);
+
+        // Mask sensitive fields for restricted roles (QA/group-leader)
+        if (!$canFullSearch) {
+            $media->setCollection(
+                $media->getCollection()->map(fn($m) => [
+                    'media_id' => $m->media_id,
+                    'filename' => $m->filename,
+                    'type' => $m->type,
+                    'status' => $m->status,
+                    'created_at' => $m->created_at,
+                    'camera_number' => $m->camera_number,
+                    'sd_label' => $m->sdCard?->sd_label,
+                    'issues' => $m->issues,
+                    'has_issues' => $m->issues->count() > 0,
+                ])
+            );
+        }
 
         return response()->json($media);
     }

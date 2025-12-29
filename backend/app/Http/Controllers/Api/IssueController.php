@@ -58,7 +58,7 @@ class IssueController extends Controller
         $issue = Issue::where('issue_id', $issueId)->firstOrFail();
 
         // Only group leaders, QA, or admins can acknowledge
-        if (!$user->isAdmin() && !$user->isGroupLeader() && !$user->isQA()) {
+        if (!$user->isAdmin() && !$user->isGroupLeader() && !$user->isQA() && !$user->isQALead()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -80,6 +80,11 @@ class IssueController extends Controller
 
         $user = auth('api')->user();
         $issue = Issue::where('issue_id', $issueId)->firstOrFail();
+
+        // Only group leaders, QA, or admins can resolve
+        if (!$user->isAdmin() && !$user->isGroupLeader() && !$user->isQA() && !$user->isQALead()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
 
         $issue->resolve($user, $request->resolution_notes);
 
@@ -106,6 +111,11 @@ class IssueController extends Controller
         $user = auth('api')->user();
         $issue = Issue::where('issue_id', $issueId)->firstOrFail();
 
+        // Only operational/admin roles can escalate
+        if (!$user->isAdmin() && !$user->isGroupLeader() && !$user->isQA() && !$user->isQALead()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $issue->update([
             'status' => 'escalated',
         ]);
@@ -126,7 +136,7 @@ class IssueController extends Controller
         $query = Issue::query()->with(['media', 'reporter', 'group']);
 
         // QA can only see issues, not browse all media
-        if ($user->isQA() && !$user->isAdmin()) {
+        if (($user->isQA() || $user->isQALead()) && !$user->isAdmin()) {
             // QA sees all issues but limited info
             $query->whereIn('status', ['open', 'acknowledged', 'in_progress', 'escalated']);
         } elseif ($user->isGroupLeader() && !$user->isAdmin()) {
@@ -167,6 +177,10 @@ class IssueController extends Controller
             ->firstOrFail();
 
         $user = auth('api')->user();
+
+        if (!$user->isAdmin() && !$user->isGroupLeader() && !$user->isQA() && !$user->isQALead() && $issue->reported_by !== $user->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
         AuditLog::log('issue.view', $user, 'Issue', $issue->id);
 
         return response()->json($issue);
