@@ -448,6 +448,16 @@ type CopyState = {
   copiedKeys: Set<string>;
 };
 
+type MediaBatchItem = {
+  filename: string;
+  original_path: string;
+  type: 'before' | 'after';
+  size_bytes: number;
+  checksum?: string | null;
+  created_at?: string | null;
+  parsed_metadata?: { full_name?: string; age?: number; condition?: string; region?: string };
+};
+
 function inferMediaTypeFromFilename(filename: string): 'before' | 'after' {
   const n = filename.toLowerCase();
   if (n.includes('after')) return 'after';
@@ -480,6 +490,80 @@ async function trySyncMediaOnCopy(params: {
   quickHash?: string | null;
   createdAtIso?: string | null;
 }): Promise<void> {
+  // deprecated (kept for compatibility): this now queues into the batcher
+  await queueMediaForBatch({
+    filename: params.filename,
+    fullPath: params.fullPath,
+    sizeBytes: params.sizeBytes,
+    checksum: params.quickHash ?? null,
+    createdAtIso: params.createdAtIso ?? null,
+  });
+}
+
+let mediaBatchTimer: NodeJS.Timeout | null = null;
+let mediaBatch: MediaBatchItem[] = [];
+let mediaBatchCtx: {
+  agentId: string;
+  deviceId: string;
+  eventId: number;
+  camera_number: number | null;
+  sd_card_id: number | null;
+} | null = null;
+
+function clearMediaBatchTimer(): void {
+  if (mediaBatchTimer) {
+    clearTimeout(mediaBatchTimer);
+    mediaBatchTimer = null;
+  }
+}
+
+async function flushMediaBatch(reason: 'timer' | 'full' | 'session_end' | 'shutdown'): Promise<void> {
+  clearMediaBatchTimer();
+  if (!mediaBatch.length || !mediaBatchCtx) return;
+
+  const tokenData = await getToken();
+  if (!tokenData || isTokenExpired(tokenData.expiryIso)) return;
+
+  const ping = connectivity.getSnapshot();
+  const payload = {
+    agent_id: mediaBatchCtx.agentId,
+    device_id: mediaBatchCtx.deviceId,
+    event_id: mediaBatchCtx.eventId,
+    camera_number: mediaBatchCtx.camera_number,
+    sd_card_id: mediaBatchCtx.sd_card_id,
+    files: mediaBatch,
+  };
+
+  const batchSize = mediaBatch.length;
+  mediaBatch = [];
+
+  if (!ping.online) {
+    offlineQueue.enqueue({ endpoint: '/media/batch-sync', method: 'POST', payload });
+    audit.info('media.batch_sync_queued_offline', { reason, batchSize, eventId: mediaBatchCtx.eventId });
+    return;
+  }
+
+  try {
+    await api.request({ method: 'POST', url: '/media/batch-sync', data: payload, timeoutMs: 30000 });
+    audit.info('media.batch_sync_sent', { reason, batchSize, eventId: mediaBatchCtx.eventId });
+  } catch (e: any) {
+    offlineQueue.enqueue({ endpoint: '/media/batch-sync', method: 'POST', payload });
+    audit.warn('media.batch_sync_failed_queued', {
+      reason,
+      batchSize,
+      eventId: mediaBatchCtx.eventId,
+      err: e?.message ?? 'unknown',
+    });
+  }
+}
+
+async function queueMediaForBatch(params: {
+  filename: string;
+  fullPath: string;
+  sizeBytes: number;
+  checksum?: string | null;
+  createdAtIso?: string | null;
+}): Promise<void> {
   const agentId = store.get('agentId');
   const tokenData = await getToken();
   if (!agentId || !tokenData || isTokenExpired(tokenData.expiryIso)) return;
@@ -487,42 +571,52 @@ async function trySyncMediaOnCopy(params: {
   const active = sdSessionEngine?.getActive();
   if (!active || active.status !== 'active') return;
 
-  // We only sync if we know the event context.
   const eventId = active.eventId ?? store.get('activeEventId') ?? store.get('lastKnownActiveEventId') ?? null;
   if (!eventId) return;
 
-  const ping = connectivity.getSnapshot();
   const deviceId = getOrCreateDeviceId();
 
-  const payload = {
-    agent_id: agentId,
-    device_id: deviceId,
-    event_id: eventId,
+  // Reset batch context if event/binding changed
+  const ctxKey = `${agentId}:${deviceId}:${eventId}:${active.binding?.cameraNumber ?? 'n'}:${active.binding?.sdCardId ?? 'n'}`;
+  const prevKey = mediaBatchCtx
+    ? `${mediaBatchCtx.agentId}:${mediaBatchCtx.deviceId}:${mediaBatchCtx.eventId}:${mediaBatchCtx.camera_number ?? 'n'}:${mediaBatchCtx.sd_card_id ?? 'n'}`
+    : null;
+  if (prevKey && prevKey !== ctxKey) {
+    await flushMediaBatch('session_end');
+  }
+
+  mediaBatchCtx = {
+    agentId,
+    deviceId,
+    eventId: Number(eventId),
     camera_number: active.binding?.cameraNumber ?? null,
     sd_card_id: active.binding?.sdCardId ?? null,
-    file: {
-      filename: params.filename,
-      original_path: params.fullPath,
-      type: inferMediaTypeFromFilename(params.filename),
-      size_bytes: params.sizeBytes,
-      checksum: params.quickHash ?? null,
-      created_at: params.createdAtIso ?? null,
-    },
+  };
+
+  const item: MediaBatchItem = {
+    filename: params.filename,
+    original_path: params.fullPath,
+    type: inferMediaTypeFromFilename(params.filename),
+    size_bytes: params.sizeBytes,
+    checksum: params.checksum ?? null,
+    created_at: params.createdAtIso ?? null,
     parsed_metadata: parseFilenameMetadata(params.filename),
   };
 
-  if (!ping.online) {
-    offlineQueue.enqueue({ endpoint: '/media/sync', method: 'POST', payload });
-    audit.info('media.sync_queued_offline', { filename: params.filename, eventId });
+  mediaBatch.push(item);
+
+  const maxBatch = 20;
+  const flushDelayMs = 2000;
+
+  if (mediaBatch.length >= maxBatch) {
+    await flushMediaBatch('full');
     return;
   }
 
-  try {
-    await api.request({ method: 'POST', url: '/media/sync', data: payload, timeoutMs: 20000 });
-    audit.info('media.sync_sent', { filename: params.filename, eventId });
-  } catch (e: any) {
-    offlineQueue.enqueue({ endpoint: '/media/sync', method: 'POST', payload });
-    audit.warn('media.sync_failed_queued', { filename: params.filename, eventId, reason: e?.message ?? 'unknown' });
+  if (!mediaBatchTimer) {
+    mediaBatchTimer = setTimeout(() => {
+      void flushMediaBatch('timer');
+    }, flushDelayMs);
   }
 }
 
@@ -1182,12 +1276,11 @@ async function tryHandleCopiedFile(candidate: CopyCandidate): Promise<void> {
   // Media ingestion: create/update media record in backend (online or offline-queued)
   try {
     const qh = copyState.hashByKey.get(key) ?? null;
-    await trySyncMediaOnCopy({
-      sessionId: active.sessionId,
+    await queueMediaForBatch({
       filename: candidate.filename,
       fullPath: candidate.fullPath,
       sizeBytes: candidate.sizeBytes,
-      quickHash: qh,
+      checksum: qh,
       createdAtIso: null,
     });
   } catch {

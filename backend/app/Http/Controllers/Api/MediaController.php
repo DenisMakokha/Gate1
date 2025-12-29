@@ -110,9 +110,22 @@ class MediaController extends Controller
     {
         $request->validate([
             'agent_id' => 'required|string',
+            'device_id' => 'required|string',
+            'event_id' => 'required|exists:events,id',
+            'camera_session_id' => 'nullable|exists:camera_sessions,id',
+            'camera_number' => 'nullable|integer',
+            'sd_card_id' => 'nullable|exists:sd_cards,id',
             'files' => 'required|array|min:1',
             'files.*.filename' => 'required|string',
+            'files.*.original_path' => 'required|string',
+            'files.*.type' => 'required|in:before,after',
             'files.*.size_bytes' => 'required|integer',
+            'files.*.checksum' => 'nullable|string',
+            'files.*.created_at' => 'nullable|date',
+            'files.*.parsed_metadata.full_name' => 'nullable|string',
+            'files.*.parsed_metadata.age' => 'nullable|integer',
+            'files.*.parsed_metadata.condition' => 'nullable|string',
+            'files.*.parsed_metadata.region' => 'nullable|string',
         ]);
 
         $synced = 0;
@@ -121,7 +134,15 @@ class MediaController extends Controller
         $duplicates = 0;
 
         foreach ($request->files as $fileData) {
-            $syncRequest = new Request(array_merge($request->all(), ['file' => $fileData]));
+            // Each item may either be a flat file payload with nested parsed_metadata,
+            // or an object like { file: {...}, parsed_metadata: {...} }.
+            $file = $fileData['file'] ?? $fileData;
+            $parsed = $fileData['parsed_metadata'] ?? [];
+
+            $syncRequest = new Request(array_merge($request->except(['files']), [
+                'file' => $file,
+                'parsed_metadata' => $parsed,
+            ]));
             $response = $this->sync($syncRequest);
             $data = json_decode($response->getContent(), true);
 
