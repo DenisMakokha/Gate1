@@ -28,7 +28,7 @@ class StorageForecastController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isBackup()) {
+        if (!$user->isAdmin() && !$user->isBackup() && !$user->isBackupLead()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

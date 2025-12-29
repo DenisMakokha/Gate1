@@ -12,6 +12,11 @@ use Illuminate\Http\Request;
 
 class BackupController extends Controller
 {
+    protected function canAccessBackupOps($user): bool
+    {
+        return $user->isAdmin() || $user->isBackupTeam() || $user->isBackupLead();
+    }
+
     public function registerDisk(Request $request): JsonResponse
     {
         $request->validate([
@@ -23,7 +28,7 @@ class BackupController extends Controller
 
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isBackupTeam()) {
+        if (!$this->canAccessBackupOps($user)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -57,6 +62,11 @@ class BackupController extends Controller
         ]);
 
         $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $media = Media::where('media_id', $request->media_id)->first();
         $disk = BackupDisk::find($request->backup_disk_id);
 
@@ -103,6 +113,11 @@ class BackupController extends Controller
         ]);
 
         $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $media = Media::where('media_id', $request->media_id)->first();
 
         $backup = Backup::where('media_id', $media->id)
@@ -142,7 +157,7 @@ class BackupController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isBackupTeam()) {
+        if (!$this->canAccessBackupOps($user)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -184,7 +199,7 @@ class BackupController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isBackupTeam()) {
+        if (!$this->canAccessBackupOps($user)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -201,6 +216,12 @@ class BackupController extends Controller
 
     public function diskStatus(int $diskId): JsonResponse
     {
+        $user = auth('api')->user();
+
+        if (!$this->canAccessBackupOps($user)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $disk = BackupDisk::withCount([
             'backups',
             'backups as verified_backups' => fn($q) => $q->where('is_verified', true),
@@ -231,7 +252,7 @@ class BackupController extends Controller
     {
         $user = auth('api')->user();
 
-        if (!$user->isAdmin() && !$user->isBackupTeam()) {
+        if (!$this->canAccessBackupOps($user)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
