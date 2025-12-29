@@ -11,6 +11,19 @@ use Illuminate\Http\Request;
 
 class SettingsController extends Controller
 {
+    protected function toBool($value, bool $default = false): bool
+    {
+        if ($value === null) {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = auth('api')->user();
@@ -189,8 +202,8 @@ class SettingsController extends Controller
         return response()->json([
             'app_name' => SystemSetting::get('app_name', 'Gate 1 System'),
             'app_url' => SystemSetting::get('app_url', 'http://localhost:3000'),
-            'require_approval' => SystemSetting::get('require_approval', true),
-            'allow_self_registration' => SystemSetting::get('allow_self_registration', true),
+            'require_approval' => $this->toBool(SystemSetting::get('require_approval', true), true),
+            'allow_self_registration' => $this->toBool(SystemSetting::get('allow_self_registration', true), true),
         ]);
     }
 
