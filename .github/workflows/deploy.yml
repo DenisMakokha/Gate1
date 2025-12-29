@@ -13,7 +13,7 @@ on:
       skip_migrations:
         description: 'Skip database migrations'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 env:
@@ -73,7 +73,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: web-dashboard/package-lock.json
+          cache-dependency-path: ${{ github.workspace }}/web-dashboard/package-lock.json
 
       - name: Install dependencies
         working-directory: web-dashboard

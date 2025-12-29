@@ -25,8 +25,8 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: |
-            desktop-agent-v2/package-lock.json
-            desktop-agent-v2/renderer/package-lock.json
+            ${{ github.workspace }}/desktop-agent-v2/package-lock.json
+            ${{ github.workspace }}/desktop-agent-v2/renderer/package-lock.json
 
       - name: Install dependencies
         run: npm ci
