@@ -34,11 +34,12 @@ return new class extends Migration
         });
 
         // Backfill camera_id for existing rows (non-destructive)
+        // PostgreSQL requires explicit cast for LPAD with integer column
         if (Schema::hasColumn('cameras', 'camera_number') && Schema::hasColumn('cameras', 'camera_id')) {
             DB::table('cameras')
                 ->whereNull('camera_id')
                 ->update([
-                    'camera_id' => DB::raw("CONCAT('CAM-', LPAD(camera_number, 3, '0'))"),
+                    'camera_id' => DB::raw("CONCAT('CAM-', LPAD(camera_number::text, 3, '0'))"),
                 ]);
         }
     }
