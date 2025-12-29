@@ -66,11 +66,7 @@ export default function Layout({ children }) {
   };
 
   const toggleSection = (section) => {
-    setExpandedSections(prev => 
-      prev.includes(section) 
-        ? prev.filter(s => s !== section)
-        : [...prev, section]
-    );
+    setExpandedSections((prev) => (prev.includes(section) ? [] : [section]));
   };
 
   const menuStructure = [
