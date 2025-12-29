@@ -20,7 +20,155 @@ import {
   Wifi,
   Circle,
   RefreshCw,
+  Calendar,
+  MapPin,
+  Zap,
+  Play,
+  ArrowRight,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+// Calculate remaining time for an event
+function getRemainingTime(endDate) {
+  if (!endDate) return null;
+  const end = new Date(endDate);
+  const now = new Date();
+  const diff = end - now;
+  
+  if (diff <= 0) return { expired: true, text: 'Event ended', days: 0, hours: 0 };
+  
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  
+  let text = '';
+  if (days > 0) text = `${days}d ${hours}h remaining`;
+  else if (hours > 0) text = `${hours}h ${minutes}m remaining`;
+  else text = `${minutes}m remaining`;
+  
+  return { expired: false, text, days, hours, minutes };
+}
+
+// Active Event Hero Card
+function ActiveEventCard({ event }) {
+  if (!event) {
+    return (
+      <div className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-5 h-5" />
+              <span className="text-sm font-medium opacity-90">No Active Event</span>
+            </div>
+            <h2 className="text-2xl font-bold mb-1">Activate an Event to Begin</h2>
+            <p className="text-white/80 text-sm">All operations are scoped to the active event. Go to Events to activate one.</p>
+          </div>
+          <Link
+            to="/events"
+            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Play className="w-4 h-4" />
+            Go to Events
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const remaining = getRemainingTime(event.end_datetime || event.end_date);
+  const startDate = new Date(event.start_datetime || event.start_date);
+  const endDate = event.end_datetime || event.end_date ? new Date(event.end_datetime || event.end_date) : null;
+
+  return (
+    <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+      {/* Background pattern */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
+      </div>
+      
+      <div className="relative">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              <span className="text-sm font-medium opacity-90">ACTIVE EVENT</span>
+            </div>
+            <h2 className="text-3xl font-bold mb-1">{event.name}</h2>
+            <p className="text-white/80 text-sm">{event.code}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Zap className="w-6 h-6" />
+            <span className="text-lg font-semibold">Running</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="bg-white/10 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-white/70 text-xs mb-1">
+              <Calendar className="w-3 h-3" />
+              Started
+            </div>
+            <div className="font-semibold">
+              {startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </div>
+          </div>
+          {endDate && (
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-white/70 text-xs mb-1">
+                <Clock className="w-3 h-3" />
+                Ends
+              </div>
+              <div className="font-semibold">
+                {endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </div>
+            </div>
+          )}
+          {event.location && (
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-white/70 text-xs mb-1">
+                <MapPin className="w-3 h-3" />
+                Location
+              </div>
+              <div className="font-semibold truncate">{event.location}</div>
+            </div>
+          )}
+          {remaining && (
+            <div className={`rounded-lg p-3 ${remaining.expired ? 'bg-yellow-500/30' : 'bg-white/10'}`}>
+              <div className="flex items-center gap-2 text-white/70 text-xs mb-1">
+                <Activity className="w-3 h-3" />
+                Time Left
+              </div>
+              <div className="font-semibold">
+                {remaining.expired ? 'Past end date' : remaining.text}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <Video className="w-4 h-4 opacity-70" />
+              <span>{event.media_count || 0} media files</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 opacity-70" />
+              <span>{event.groups_count || 0} groups</span>
+            </div>
+          </div>
+          <Link
+            to="/events"
+            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Manage Event
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StatCard({ title, value, icon: Icon, color, subtitle }) {
   const colors = {
@@ -247,6 +395,9 @@ export default function Dashboard() {
           onAction={handleAttentionAction}
         />
 
+        {/* Active Event Hero Card */}
+        <ActiveEventCard event={activeEvent} />
+
         {/* Session State Banner */}
         {sessionState !== 'IDLE' && (
           <SessionBanner
@@ -382,6 +533,9 @@ export default function Dashboard() {
   if (isTeamLead() && data?.overview) {
     return (
       <div className="space-y-6">
+        {/* Active Event Hero Card */}
+        <ActiveEventCard event={activeEvent} />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Operations Command</h1>
           <p className="text-gray-500">Event operations oversight — real-time situational awareness</p>
@@ -443,6 +597,9 @@ export default function Dashboard() {
   if (isGroupLeader() && data?.groups) {
     return (
       <div className="space-y-6">
+        {/* Active Event Hero Card */}
+        <ActiveEventCard event={activeEvent} />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Team Control View</h1>
           <p className="text-gray-500">Your group's operations — no global data, only your team</p>
