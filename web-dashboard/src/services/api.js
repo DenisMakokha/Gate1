@@ -194,6 +194,7 @@ export const exportService = {
 export const reportsService = {
   dailySummary: (params) => api.get('/reports/daily-summary', { params }),
   eventReport: (eventId, params) => api.get(`/reports/event/${eventId}`, { params }),
+  getQuickStats: (params) => api.get('/reports/quick-stats', { params }),
 };
 
 export const activityFeedService = {

@@ -19,6 +19,59 @@ use Illuminate\Support\Facades\Storage;
 
 class ExportController extends Controller
 {
+    public function quickStats(Request $request): JsonResponse
+    {
+        $user = auth('api')->user();
+
+        if (!$user->hasOperationalAccess() && !$user->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $eventId = $request->get('event_id');
+        $monthStart = now()->startOfMonth();
+
+        $exportActions = [
+            'media_exported',
+            'issues_exported',
+            'healing_cases_exported',
+            'editor_performance_exported',
+        ];
+
+        $downloadsQuery = AuditLog::query()->whereIn('action', $exportActions);
+
+        // Group leaders only see their own generated exports
+        if (!$user->hasOperationalAccess()) {
+            $downloadsQuery->where('user_id', $user->id);
+        }
+
+        $totalDownloads = (clone $downloadsQuery)->count();
+        $downloadsThisMonth = (clone $downloadsQuery)
+            ->where('created_at', '>=', $monthStart)
+            ->count();
+
+        // Storage used (sum media size)
+        $storageQuery = Media::query();
+
+        if ($eventId) {
+            $storageQuery->where('event_id', $eventId);
+        }
+
+        if (!$user->hasOperationalAccess()) {
+            $groupIds = $user->ledGroups()->pluck('id');
+            $storageQuery->whereIn('group_id', $groupIds);
+        }
+
+        $storageBytes = (int) $storageQuery->sum('size_bytes');
+
+        return response()->json([
+            'reports_this_month' => $downloadsThisMonth,
+            'total_downloads' => $totalDownloads,
+            'storage_used_bytes' => $storageBytes,
+            'storage_used_formatted' => $this->formatBytes($storageBytes),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
     public function exportMedia(Request $request): Response
     {
         $user = auth('api')->user();

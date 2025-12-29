@@ -264,6 +264,7 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('reports')->group(function () {
         Route::get('/daily-summary', [ExportController::class, 'dailySummary']);
         Route::get('/event/{eventId}', [ExportController::class, 'eventReport']);
+        Route::get('/quick-stats', [ExportController::class, 'quickStats']);
     });
 
     // Activity Feed routes

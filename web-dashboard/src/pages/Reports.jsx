@@ -101,11 +101,24 @@ export default function Reports() {
   const [recentReports, setRecentReports] = useState([]);
   const [events, setEvents] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [quickStats, setQuickStats] = useState(null);
 
   useEffect(() => {
     if (!activeEvent?.id) return;
     setEventId(String(activeEvent.id));
   }, [activeEvent?.id]);
+
+  useEffect(() => {
+    const loadQuickStats = async () => {
+      try {
+        const res = await reportsService.getQuickStats({ event_id: eventId || undefined });
+        setQuickStats(res);
+      } catch {
+        setQuickStats(null);
+      }
+    };
+    loadQuickStats();
+  }, [eventId]);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -326,15 +339,15 @@ export default function Reports() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-blue-100">Reports this month</span>
-                <span className="font-semibold">24</span>
+                <span className="font-semibold">{quickStats?.reports_this_month ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-blue-100">Total downloads</span>
-                <span className="font-semibold">156</span>
+                <span className="font-semibold">{quickStats?.total_downloads ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-blue-100">Storage used</span>
-                <span className="font-semibold">48 MB</span>
+                <span className="font-semibold">{quickStats?.storage_used_formatted ?? '0 B'}</span>
               </div>
             </div>
           </div>
