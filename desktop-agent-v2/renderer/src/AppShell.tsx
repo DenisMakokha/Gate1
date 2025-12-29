@@ -191,6 +191,7 @@ export default function AppShell() {
         subtitle="Desktop Agent"
         online={typeof coreStatus?.online === 'boolean' ? coreStatus.online : null}
         platform={coreStatus?.platform ?? null}
+        activeEvent={coreStatus?.activeEvent ?? null}
         attention={uiState?.state === 'ATTENTION_REQUIRED'}
         activeSession={activeSession ? {
           sessionId: activeSession.sessionId,

@@ -174,6 +174,25 @@ async function computeQuickHash(filePath: string, fileSize: number): Promise<str
   }
 }
 
+async function refreshActiveEventSummary(): Promise<void> {
+  const tokenData = await getToken();
+  if (!tokenData || isTokenExpired(tokenData.expiryIso)) return;
+
+  const ping = connectivity.getSnapshot();
+  if (!ping.online) return;
+
+  try {
+    const activeEvent = await api.getActiveEvent();
+    store.set('activeEventId', activeEvent?.id ?? null);
+    store.set('activeEventName', activeEvent?.name ?? null);
+    store.set('activeEventFetchedAtIso', new Date().toISOString());
+  } catch {
+    store.set('activeEventId', null);
+    store.set('activeEventName', null);
+    store.set('activeEventFetchedAtIso', new Date().toISOString());
+  }
+}
+
 async function scanBackupQuickHashes(params: { destSessionDir: string; cacheKey: string }): Promise<Map<string, { count: number; examplePath: string }>> {
   const nowMs = Date.now();
   if (backupHashScanCache && backupHashScanCache.key === params.cacheKey && nowMs - backupHashScanCache.computedAtMs < 10_000) {
@@ -2007,6 +2026,7 @@ async function initCore() {
       // fire-and-forget: do not block heartbeat tick
       void drainQueueOnce();
       void refreshAgentConfig();
+      void refreshActiveEventSummary();
 
       // refresh cached policy on reconnect
       if (cachedEventPolicy?.eventId) {
@@ -2084,10 +2104,12 @@ async function initCore() {
   if (configRefreshTimer) clearInterval(configRefreshTimer);
   configRefreshTimer = setInterval(() => {
     void refreshAgentConfig();
+    void refreshActiveEventSummary();
   }, 5 * 60_000);
 
   // initial best-effort refresh (do not block startup)
   void refreshAgentConfig();
+  void refreshActiveEventSummary();
 }
 
 function registerIpc() {
@@ -2157,6 +2179,11 @@ function registerIpc() {
       lastQueueDrainAtIso,
       lastConfigRefreshAtIso,
       eventPolicy: cachedEventPolicy,
+      activeEvent: {
+        id: store.get('activeEventId') ?? null,
+        name: store.get('activeEventName') ?? null,
+        fetchedAtIso: store.get('activeEventFetchedAtIso') ?? null,
+      },
       lastKnownActiveEventId: store.get('lastKnownActiveEventId') ?? null,
       lastKnownActiveEventAtIso: store.get('lastKnownActiveEventAtIso') ?? null,
       mountedSds: sdDetector?.getMounted?.() ?? [],

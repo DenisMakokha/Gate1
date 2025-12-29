@@ -5,6 +5,7 @@ type Props = {
   subtitle?: string;
   online: boolean | null;
   platform?: string | null;
+  activeEvent?: { id: number | null; name: string | null } | null;
   activeSession?: { sessionId: string; eventId: string | null; serverSessionId: string | null } | null;
   attention?: boolean;
 };
@@ -28,6 +29,13 @@ export function BrandHero(props: Props) {
 
   const mascotUrl = new URL('../assets/mascot.svg', import.meta.url).toString();
 
+  const activeEventLabel = (() => {
+    const ev = props.activeEvent;
+    if (!ev || !ev.id) return 'No active event';
+    if (ev.name) return ev.name;
+    return `Event ${ev.id}`;
+  })();
+
   const sessionLabel = props.activeSession?.eventId
     ? `Event ${props.activeSession.eventId}`
     : props.activeSession?.sessionId
@@ -44,6 +52,7 @@ export function BrandHero(props: Props) {
         <div className="brandBannerRight">
           <span className={pillClass(status.kind)}>{status.label}</span>
           <span className={pillClass('neutral')}>{props.platform ?? '-'}</span>
+          <span className={pillClass(props.activeEvent?.id ? 'blue' : 'warn')}>{activeEventLabel}</span>
           <span className={pillClass(props.activeSession ? 'ok' : 'neutral')}>{sessionLabel}</span>
         </div>
       </div>
