@@ -187,6 +187,19 @@ export const exportService = {
   exportIssues: (params) => api.get('/export/issues', { params, responseType: 'blob' }),
   exportAuditLogs: (params) => api.get('/export/audit-logs', { params, responseType: 'blob' }),
   exportHealingCases: (params) => api.get('/export/healing-cases', { params, responseType: 'blob' }),
+  backupReport: (params) => api.get('/export/backup-report', { params, responseType: 'blob' }),
+  editorPerformance: (params) => api.get('/export/editor-performance', { params, responseType: 'blob' }),
+};
+
+export const reportsService = {
+  dailySummary: (params) => api.get('/reports/daily-summary', { params }),
+  eventReport: (eventId, params) => api.get(`/reports/event/${eventId}`, { params }),
+};
+
+export const activityFeedService = {
+  get: (params) => api.get('/activity-feed', { params }),
+  timeline: (params) => api.get('/activity-feed/timeline', { params }),
+  stats: (params) => api.get('/activity-feed/stats', { params }),
 };
 
 export const qualityControlService = {

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { eventService, exportService, reportsService } from '../services/api';
 import {
   FileText,
   Download,
@@ -92,43 +93,133 @@ const categoryLabels = {
 };
 
 export default function Reports() {
-  const { isAdmin, isTeamLead } = useAuth();
+  const { activeEvent } = useAuth();
   const [selectedReport, setSelectedReport] = useState(null);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [eventId, setEventId] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [recentReports, setRecentReports] = useState([
-    { id: 1, name: 'Daily Summary - Dec 25, 2024', type: 'pdf', size: '245 KB', time: '2 hours ago' },
-    { id: 2, name: 'Event Report - TEST-2024', type: 'xlsx', size: '1.2 MB', time: '1 day ago' },
-    { id: 3, name: 'Backup Status - December', type: 'pdf', size: '180 KB', time: '3 days ago' },
-  ]);
+  const [recentReports, setRecentReports] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!activeEvent?.id) return;
+    setEventId(String(activeEvent.id));
+  }, [activeEvent?.id]);
+
+  useEffect(() => {
+    const loadEvents = async () => {
+      try {
+        const res = await eventService.getAll({ status: 'active' });
+        const list = res?.data || res?.events || res || [];
+        setEvents(Array.isArray(list) ? list : []);
+      } catch (e) {
+        setEvents([]);
+      }
+    };
+    loadEvents();
+  }, []);
+
+  const groupedReports = useMemo(() => {
+    return reportTypes.reduce((acc, report) => {
+      if (!acc[report.category]) acc[report.category] = [];
+      acc[report.category].push(report);
+      return acc;
+    }, {});
+  }, []);
+
+  const downloadBlob = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const isoDate = (value) => {
+    if (!value) return '';
+    try {
+      return new Date(value).toISOString().slice(0, 10);
+    } catch {
+      return '';
+    }
+  };
+
+  const reportFilename = (base, ext) => {
+    const stamp = isoDate(new Date());
+    return `${base}_${stamp}.${ext}`;
+  };
 
   const handleGenerate = async (reportId, format) => {
     setGenerating(true);
-    // Simulate report generation
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const report = reportTypes.find(r => r.id === reportId);
-    const newReport = {
-      id: Date.now(),
-      name: `${report.name} - ${new Date().toLocaleDateString()}`,
-      type: format,
-      size: '---',
-      time: 'Just now',
-    };
-    setRecentReports(prev => [newReport, ...prev.slice(0, 9)]);
-    setGenerating(false);
-    setSelectedReport(null);
-    
-    // Trigger download (mock)
-    alert(`Report "${newReport.name}" generated! Download would start automatically.`);
-  };
+    setErrorMessage('');
+    try {
+      const report = reportTypes.find(r => r.id === reportId);
+      if (!report) {
+        throw new Error('Unknown report type');
+      }
 
-  const groupedReports = reportTypes.reduce((acc, report) => {
-    if (!acc[report.category]) acc[report.category] = [];
-    acc[report.category].push(report);
-    return acc;
-  }, {});
+      const params = {
+        event_id: eventId || undefined,
+        from_date: dateRange.start || undefined,
+        to_date: dateRange.end || undefined,
+      };
+
+      // CSV exports (real downloads)
+      if (reportId === 'media-export') {
+        const blob = await exportService.exportMedia(params);
+        downloadBlob(blob, reportFilename('media_export', 'csv'));
+      } else if (reportId === 'issues-report') {
+        const blob = await exportService.exportIssues(params);
+        downloadBlob(blob, reportFilename('issues_export', 'csv'));
+      } else if (reportId === 'backup-report') {
+        const blob = await exportService.backupReport(params);
+        downloadBlob(blob, reportFilename('backup_report', 'csv'));
+      } else if (reportId === 'editor-performance') {
+        const blob = await exportService.editorPerformance(params);
+        downloadBlob(blob, reportFilename('editor_performance', 'csv'));
+      } else if (reportId === 'healing-cases') {
+        const blob = await exportService.exportHealingCases(params);
+        downloadBlob(blob, reportFilename('healing_cases_export', 'csv'));
+      } else if (reportId === 'audit-logs') {
+        const blob = await exportService.exportAuditLogs(params);
+        downloadBlob(blob, reportFilename('audit_logs_export', 'csv'));
+      } else if (reportId === 'daily-summary') {
+        const data = await reportsService.dailySummary({
+          date: dateRange.start || undefined,
+          event_id: eventId || undefined,
+        });
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        downloadBlob(blob, reportFilename('daily_summary', 'json'));
+      } else if (reportId === 'event-report') {
+        if (!eventId) {
+          throw new Error('Please select an event');
+        }
+        const data = await reportsService.eventReport(eventId, { event_id: eventId });
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        downloadBlob(blob, reportFilename(`event_report_${eventId}`, 'json'));
+      } else {
+        throw new Error('This report type is not implemented yet');
+      }
+
+      const newReport = {
+        id: Date.now(),
+        name: `${report.name} - ${new Date().toLocaleDateString()}`,
+        type: format,
+        size: 'downloaded',
+        time: 'Just now',
+      };
+      setRecentReports((prev) => [newReport, ...prev.slice(0, 9)]);
+      setSelectedReport(null);
+    } catch (err) {
+      setErrorMessage(err?.message || 'Failed to generate report');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -138,6 +229,12 @@ export default function Reports() {
           <p className="text-gray-500">Generate and download system reports</p>
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Report Types */}
@@ -288,8 +385,11 @@ export default function Reports() {
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select event...</option>
-                    <option value="1">TEST-2024 - Test Event</option>
-                    <option value="2">CONF-2024 - Conference</option>
+                    {events.map((ev) => (
+                      <option key={ev.id} value={String(ev.id)}>
+                        {ev.event_code || ev.code || ev.name} {ev.name ? `- ${ev.name}` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}

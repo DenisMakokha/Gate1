@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { activityFeedService } from '../services/api';
 import {
   Activity,
   Video,
@@ -22,21 +23,6 @@ import {
   FileText,
 } from 'lucide-react';
 
-const mockActivities = [
-  { id: 1, type: 'media_upload', user: 'John Doe', target: 'CAM-042', message: 'uploaded 15 media files', time: '2 min ago', group: 'Alpha' },
-  { id: 2, type: 'issue_created', user: 'Jane Smith', target: 'ISSUE-127', message: 'reported missing footage issue', time: '5 min ago', group: 'Beta' },
-  { id: 3, type: 'backup_complete', user: 'System', target: 'DISK-003', message: 'completed backup verification', time: '10 min ago' },
-  { id: 4, type: 'user_login', user: 'Mike Johnson', message: 'logged in from Desktop Agent', time: '15 min ago', group: 'Alpha' },
-  { id: 5, type: 'issue_resolved', user: 'Sarah Wilson', target: 'ISSUE-125', message: 'resolved corrupt file issue', time: '20 min ago', group: 'QA' },
-  { id: 6, type: 'media_edit', user: 'Tom Brown', target: 'VID-2024-001', message: 'edited metadata', time: '25 min ago', group: 'Alpha' },
-  { id: 7, type: 'user_joined', user: 'Admin', target: 'Emily Davis', message: 'added new editor to Group Beta', time: '30 min ago' },
-  { id: 8, type: 'camera_bind', user: 'John Doe', target: 'CAM-055', message: 'bound camera to SD card', time: '45 min ago', group: 'Alpha' },
-  { id: 9, type: 'backup_started', user: 'System', target: 'DISK-004', message: 'started backup process', time: '1 hour ago' },
-  { id: 10, type: 'qa_approved', user: 'QA Lead', target: '25 files', message: 'approved for publishing', time: '1 hour ago', group: 'QA' },
-  { id: 11, type: 'settings_changed', user: 'Admin', message: 'updated system settings', time: '2 hours ago' },
-  { id: 12, type: 'event_started', user: 'Admin', target: 'TEST-2024', message: 'activated event', time: '3 hours ago' },
-];
-
 const activityTypes = {
   media_upload: { icon: Upload, color: 'text-blue-500', bg: 'bg-blue-100' },
   media_edit: { icon: Edit, color: 'text-purple-500', bg: 'bg-purple-100' },
@@ -54,22 +40,66 @@ const activityTypes = {
 };
 
 export default function ActivityFeed() {
-  const { user } = useAuth();
-  const [activities, setActivities] = useState(mockActivities);
+  const { user, activeEvent } = useAuth();
+  const [activities, setActivities] = useState([]);
   const [filter, setFilter] = useState('all');
   const [isLive, setIsLive] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState({ today: {}, hourly_activity: [] });
 
   const filteredActivities = activities.filter(a => {
     if (filter === 'all') return true;
     return a.type.includes(filter);
   });
 
+  const mapActivity = (a) => {
+    const userName = a.user?.name || 'System';
+    const groupCode = a.group?.code;
+    const message = a.description || a.title || '';
+
+    const target = (() => {
+      const meta = a.metadata || {};
+      return meta.issue_id || meta.media_id || meta.camera_number || meta.disk_label || meta.event_code || null;
+    })();
+
+    return {
+      id: a.id,
+      type: a.type,
+      user: userName,
+      target,
+      message,
+      time: a.time_ago || (a.created_at ? new Date(a.created_at).toLocaleString() : ''),
+      group: groupCode,
+      raw: a,
+    };
+  };
+
   const refresh = async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
+    try {
+      const [feedRes, statsRes] = await Promise.all([
+        activityFeedService.get({ event_id: activeEvent?.id, limit: 100 }),
+        activityFeedService.stats({ event_id: activeEvent?.id }),
+      ]);
+
+      setActivities((feedRes?.activities || []).map(mapActivity));
+      setStats(statsRes || { today: {}, hourly_activity: [] });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    refresh();
+  }, [activeEvent?.id]);
+
+  useEffect(() => {
+    if (!isLive) return;
+    const interval = setInterval(() => {
+      refresh();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isLive, filter, activeEvent?.id]);
 
   const getActivityIcon = (type) => {
     const config = activityTypes[type] || { icon: Activity, color: 'text-gray-500', bg: 'bg-gray-100' };
@@ -83,8 +113,8 @@ export default function ActivityFeed() {
 
   // Stats
   const todayCount = activities.length;
-  const issueCount = activities.filter(a => a.type.includes('issue')).length;
-  const mediaCount = activities.filter(a => a.type.includes('media')).length;
+  const issueCount = stats?.today?.issues_reported ?? activities.filter(a => a.type.includes('issue')).length;
+  const mediaCount = (stats?.today?.copies_started ?? 0) + (stats?.today?.copies_completed ?? 0);
 
   return (
     <div className="space-y-6">
