@@ -83,6 +83,9 @@ const gate1 = {
   sd: {
     removalDecision: (payload: { decision: 'reinsert' | 'confirm_early_removal' }) =>
       ipcRenderer.invoke('sd:removal-decision', payload) as Promise<any>,
+    bind: (payload: { hardwareId: string; cameraNumber: number; sdLabel: string; capacityBytes?: number }) =>
+      ipcRenderer.invoke('sd:bind', payload) as Promise<any>,
+    getMounted: () => ipcRenderer.invoke('sd:get-mounted') as Promise<any>,
   },
   events: {
     on: (channel: string, handler: (...args: any[]) => void) => {
@@ -94,6 +97,10 @@ const gate1 = {
   },
   snapshot: {
     get: (payload: { sessionId: string }) => ipcRenderer.invoke('snapshot:get', payload) as Promise<any>,
+  },
+  session: {
+    updateProgress: (payload: { filesCopied: number; filesPending: number }) =>
+      ipcRenderer.invoke('session:update-progress', payload) as Promise<any>,
   },
   issues: {
     list: () => ipcRenderer.invoke('issues:list') as Promise<any>,
