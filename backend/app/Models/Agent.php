@@ -23,6 +23,13 @@ class Agent extends Model
         'watched_folders',
         'latency_ms',
         'last_seen_at',
+        'clips_copied_today',
+        'clips_renamed_today',
+        'clips_backed_up_today',
+        'clips_copied_total',
+        'clips_renamed_total',
+        'clips_backed_up_total',
+        'metrics_date',
     ];
 
     protected $hidden = [
@@ -32,6 +39,7 @@ class Agent extends Model
     protected $casts = [
         'watched_folders' => 'array',
         'last_seen_at' => 'datetime',
+        'metrics_date' => 'date',
     ];
 
     public function user()

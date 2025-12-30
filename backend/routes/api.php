@@ -183,6 +183,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/', [UserController::class, 'store']);
         Route::get('/roles', [UserController::class, 'roles']);
         Route::get('/editors-status', [UserController::class, 'editorsStatus']);
+        Route::get('/editors/{id}/metrics', [UserController::class, 'editorMetrics']);
         Route::post('/heartbeat', [UserController::class, 'heartbeat']);
         Route::post('/offline', [UserController::class, 'setOffline']);
         

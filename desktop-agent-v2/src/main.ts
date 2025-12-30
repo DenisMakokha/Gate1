@@ -87,6 +87,60 @@ let lastBackupReadyBubbleAtMs = 0;
 let lastIssuePromptAtMs = 0;
 let lastIssuePromptKey: string | null = null;
 
+// Session metrics tracking (reset per session)
+let sessionMetrics = {
+  clipsCopied: 0,
+  clipsRenamed: 0,
+  clipsBackedUp: 0,
+};
+
+function getSessionMetrics(): { clips_copied: number; clips_renamed: number; clips_backed_up: number } {
+  // Get live counts from copyState if available
+  const copied = copyState?.copiedKeys?.size ?? sessionMetrics.clipsCopied;
+  const renamed = copyState?.renamedFiles?.size ?? sessionMetrics.clipsRenamed;
+  return {
+    clips_copied: copied,
+    clips_renamed: renamed,
+    clips_backed_up: sessionMetrics.clipsBackedUp,
+  };
+}
+
+function incrementBackupCount(count: number): void {
+  sessionMetrics.clipsBackedUp += count;
+}
+
+function resetSessionMetrics(): void {
+  sessionMetrics = { clipsCopied: 0, clipsRenamed: 0, clipsBackedUp: 0 };
+}
+
+function getCurrentActivity(): string {
+  switch (uiState) {
+    case 'SD_DETECTED':
+      return 'SD card detected - preparing session';
+    case 'SESSION_ACTIVE':
+      return 'Session active - reviewing clips';
+    case 'COPYING_IN_PROGRESS':
+      return 'Copying files';
+    case 'ATTENTION_REQUIRED':
+      return 'Attention required - action needed';
+    case 'ISSUE_RECORDED':
+      return 'Issue reported';
+    case 'SD_REMOVAL_CHECK':
+      return 'Verifying SD card removal';
+    case 'EARLY_REMOVAL_CONFIRMED':
+      return 'SD removed early - verification needed';
+    case 'BACKUP_IN_PROGRESS':
+      return 'Backup in progress';
+    case 'SESSION_CLOSED':
+      return 'Session completed';
+    case 'RETENTION_PENDING':
+      return 'Retention pending';
+    case 'IDLE':
+    default:
+      return 'Idle - monitoring';
+  }
+}
+
 let lastAuthOk = false;
 let lastMascotNet: boolean | null = null;
 let lastMascotLive = false;
@@ -2147,6 +2201,13 @@ async function initCore() {
   backupEngine.on('complete', (d: any) => {
     audit.info('backup.complete', d);
     mainWindow?.webContents?.send('backup:complete', d);
+    
+    // Increment backup metrics
+    const backedUpCount = Number(d?.completedFiles ?? 0);
+    if (backedUpCount > 0) {
+      incrementBackupCount(backedUpCount);
+    }
+    
     if (d?.sessionId) {
       lastBackupSummaryBySessionId[String(d.sessionId)] = {
         completedFiles: Number(d?.completedFiles ?? 0),
@@ -2620,6 +2681,7 @@ async function initCore() {
     }
 
     if (agentId && tokenData && !isTokenExpired(tokenData.expiryIso)) {
+      const metrics = getSessionMetrics();
       try {
         if (ping.online) {
           await api.agentHeartbeat({
@@ -2628,6 +2690,7 @@ async function initCore() {
             status: 'online',
             latency_ms: ping.latencyMs ?? undefined,
             watched_folders: store.get('config')?.watchedFolders ?? [],
+            metrics,
           });
         } else {
           offlineQueue.enqueue({
@@ -2639,6 +2702,7 @@ async function initCore() {
               status: 'offline',
               latency_ms: ping.latencyMs ?? undefined,
               watched_folders: store.get('config')?.watchedFolders ?? [],
+              metrics,
             },
           });
         }
@@ -2652,25 +2716,27 @@ async function initCore() {
             status: ping.online ? 'online' : 'offline',
             latency_ms: ping.latencyMs ?? undefined,
             watched_folders: store.get('config')?.watchedFolders ?? [],
+            metrics,
           },
         });
       }
 
+      const currentActivity = getCurrentActivity();
       try {
         if (ping.online) {
-          await api.userHeartbeat({ activity: 'Idle - Monitoring' });
+          await api.userHeartbeat({ activity: currentActivity });
         } else {
           offlineQueue.enqueue({
             endpoint: '/users/heartbeat',
             method: 'POST',
-            payload: { activity: 'Idle - Monitoring' },
+            payload: { activity: currentActivity },
           });
         }
       } catch {
         offlineQueue.enqueue({
           endpoint: '/users/heartbeat',
           method: 'POST',
-          payload: { activity: 'Idle - Monitoring' },
+          payload: { activity: currentActivity },
         });
       }
     }
@@ -3474,19 +3540,31 @@ function registerIpc() {
     'auth:login',
     async (_evt: IpcMainInvokeEvent, { email, password }: { email: string; password: string }) => {
       audit.info('auth.login_attempt');
-      const res = await api.login(email, password);
+      try {
+        const res = await api.login(email, password);
 
-      const expiryIso = new Date(Date.now() + res.authorization.expires_in * 1000).toISOString();
-      await setToken(res.authorization.token, expiryIso);
-      api.setToken(res.authorization.token);
-      lastAuthOk = true; // User has valid token after login
-      updateMascotConnectivity();
-      audit.info('auth.login_success', { userId: res.user.id, expiresAt: expiryIso });
+        const expiryIso = new Date(Date.now() + res.authorization.expires_in * 1000).toISOString();
+        await setToken(res.authorization.token, expiryIso);
+        api.setToken(res.authorization.token);
+        lastAuthOk = true; // User has valid token after login
+        updateMascotConnectivity();
+        audit.info('auth.login_success', { userId: res.user.id, expiresAt: expiryIso });
 
-      // Fetch active event immediately after login
-      void refreshActiveEventSummary();
+        // Fetch active event immediately after login
+        void refreshActiveEventSummary();
 
-      return { user: res.user, expiresAt: expiryIso };
+        return { user: res.user, expiresAt: expiryIso };
+      } catch (err: any) {
+        // Extract validation error from Axios 422 response
+        const axiosData = err?.response?.data;
+        const errMsg = axiosData?.message 
+          || axiosData?.errors?.email?.[0] 
+          || axiosData?.errors?.password?.[0]
+          || err?.message 
+          || 'Login failed';
+        audit.warn('auth.login_failed', { error: errMsg });
+        throw new Error(errMsg);
+      }
     }
   );
 

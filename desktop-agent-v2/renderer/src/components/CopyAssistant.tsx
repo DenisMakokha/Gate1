@@ -69,13 +69,14 @@ export function CopyAssistant(props: Props) {
 
   if (!snapshot || snapshot.files.length === 0) {
     return (
-      <div className="card" style={{ marginTop: 12 }}>
+      <div className="card">
         <div className="cardHeader">
           <strong>Copy Assistant</strong>
-          <span className="muted">waiting for snapshot</span>
+          <span className="pill pillNeutral">Waiting</span>
         </div>
-        <div className="muted" style={{ marginTop: 8 }}>
-          Insert an SD card to scan clips.
+        <div className="emptyState" style={{ padding: '24px 16px' }}>
+          <div className="emptyStateTitle">No clips detected</div>
+          <div className="emptyStateMsg">Insert an SD card to scan and copy clips</div>
         </div>
       </div>
     );
@@ -95,33 +96,35 @@ export function CopyAssistant(props: Props) {
   const displayFiles = showAll ? notCopied : notCopied.slice(0, 10);
 
   return (
-    <div className="card" style={{ marginTop: 12 }}>
+    <div className="card">
       <div className="cardHeader">
         <strong>Copy Assistant</strong>
-        <span className="muted">{totalFiles} clips detected</span>
+        <span className="pill pillBlue">{totalFiles} clips</span>
       </div>
 
       {/* Progress Summary */}
-      <div className="grid2" style={{ marginTop: 12 }}>
+      <div className="grid2">
         <div className="kpi">
           <div className="kpiLabel">Copied</div>
-          <div className="kpiValue">{copiedCount}/{totalFiles}</div>
+          <div className="kpiValue" style={{ color: copiedCount === totalFiles ? '#16a34a' : '#3b82f6' }}>
+            {copiedCount}/{totalFiles}
+          </div>
+          <div className="kpiSub">{pendingCopy > 0 ? `${pendingCopy} pending` : 'All copied'}</div>
         </div>
         <div className="kpi">
           <div className="kpiLabel">Renamed</div>
-          <div className="kpiValue">{renamedCount}/{copiedCount || 0}</div>
+          <div className="kpiValue" style={{ color: renamedCount === copiedCount && copiedCount > 0 ? '#16a34a' : '#6b7280' }}>
+            {renamedCount}/{copiedCount || 0}
+          </div>
+          <div className="kpiSub">{pendingRename > 0 ? `${pendingRename} to review` : copiedCount > 0 ? 'All reviewed' : '—'}</div>
         </div>
       </div>
 
       {/* Progress bar */}
-      <div style={{ marginTop: 12, height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 999, overflow: 'hidden' }}>
+      <div className="progressWrap">
         <div
-          style={{
-            width: `${Math.round((copiedCount / totalFiles) * 100)}%`,
-            height: '100%',
-            background: copiedCount === totalFiles ? 'rgba(34,197,94,0.85)' : 'rgba(59,130,246,0.75)',
-            transition: 'width 0.3s ease',
-          }}
+          className={`progressBar ${copiedCount === totalFiles ? 'progressBarSuccess' : ''}`}
+          style={{ width: `${Math.round((copiedCount / totalFiles) * 100)}%` }}
         />
       </div>
 

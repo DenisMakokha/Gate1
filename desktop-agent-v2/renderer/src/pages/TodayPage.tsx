@@ -111,59 +111,65 @@ export function TodayPage(props: Props) {
       <div className="card">
         <div className="cardHeader">
           <strong>{headline}</strong>
-          <span className="muted">operational</span>
+          <span className={`pill ${online === true ? 'pillOk' : online === false ? 'pillRed' : 'pillNeutral'}`}>
+            {online === null ? 'Starting' : (online ? 'Online' : 'Offline')}
+          </span>
         </div>
-        <div className="muted" style={{ marginTop: 6 }}>{subline}</div>
+        
+        {subline && <div className="muted">{subline}</div>}
 
-        <div className="grid2" style={{ marginTop: 12 }}>
+        <div className="grid2" style={{ marginTop: 16 }}>
           <div className="kpi">
-            <div className="kpiLabel">Status</div>
-            <div className="kpiValue">{online === null ? '-' : (online ? 'Online' : 'Offline')}</div>
-            <div className="muted" style={{ marginTop: 6 }}>Queue: {queue ?? '-'}</div>
+            <div className="kpiLabel">Connection</div>
+            <div className="kpiValue" style={{ color: online ? '#16a34a' : online === false ? '#dc2626' : '#6b7280' }}>
+              {online === null ? '—' : (online ? 'Online' : 'Offline')}
+            </div>
+            <div className="kpiSub">Queue: {queue ?? 0} pending</div>
           </div>
           <div className="kpi">
             <div className="kpiLabel">Session</div>
-            <div className="kpiValue">{active?.sessionId ? 'Active' : '—'}</div>
-            <div className="muted" style={{ marginTop: 6 }}>
-              {active?.sessionId ? `ID: ${active.sessionId}` : 'Insert an SD to begin'}
+            <div className="kpiValue" style={{ color: active?.sessionId ? '#16a34a' : '#6b7280' }}>
+              {active?.sessionId ? 'Active' : 'Idle'}
+            </div>
+            <div className="kpiSub">
+              {active?.sessionId ? `#${active.sessionId.slice(0, 8)}` : 'Insert SD card'}
             </div>
           </div>
         </div>
 
-        <div className="row" style={{ marginTop: 12, gap: 8, flexWrap: 'wrap' }}>
+        <div className="row" style={{ marginTop: 16 }}>
           {canReportIssue ? (
-            <>
-              <select
-                value={issuePick}
-                onChange={async (e) => {
-                  const v = e.target.value;
-                  setIssuePick(v);
-                  if (!v) return;
-                  if (v === 'OTHER') return;
+            <select
+              value={issuePick}
+              onChange={async (e) => {
+                const v = e.target.value;
+                setIssuePick(v);
+                if (!v) return;
+                if (v === 'OTHER') return;
 
-                  try {
-                    const picked = issueOptions.find((x) => x.code === v);
-                    const clipLabel = issuePromptClip ? ` (Clip: ${issuePromptClip})` : '';
-                    const message = `${picked?.label ?? v}${clipLabel}`;
-                    await window.gate1?.issues?.report?.({
-                      severity: 'warning',
-                      code: v,
-                      message,
-                      data: issuePromptPath ? { clipPath: issuePromptPath, clipName: issuePromptClip || undefined } : undefined,
-                    });
-                    await window.gate1?.ui?.toast?.({ kind: 'success', title: 'Issue recorded', message: 'Saved for QA review.' });
-                    setIssuePick('');
-                  } catch (err: any) {
-                    await window.gate1?.ui?.toast?.({ kind: 'error', title: 'Issue failed', message: err?.message ?? 'unknown' });
-                  }
-                }}
-              >
-                <option value="">Report an issue…</option>
-                {issueOptions.map((o) => (
-                  <option key={o.code} value={o.code}>{o.label}</option>
-                ))}
-              </select>
-            </>
+                try {
+                  const picked = issueOptions.find((x) => x.code === v);
+                  const clipLabel = issuePromptClip ? ` (Clip: ${issuePromptClip})` : '';
+                  const message = `${picked?.label ?? v}${clipLabel}`;
+                  await window.gate1?.issues?.report?.({
+                    severity: 'warning',
+                    code: v,
+                    message,
+                    data: issuePromptPath ? { clipPath: issuePromptPath, clipName: issuePromptClip || undefined } : undefined,
+                  });
+                  await window.gate1?.ui?.toast?.({ kind: 'success', title: 'Issue recorded', message: 'Saved for QA review.' });
+                  setIssuePick('');
+                } catch (err: any) {
+                  await window.gate1?.ui?.toast?.({ kind: 'error', title: 'Issue failed', message: err?.message ?? 'unknown' });
+                }
+              }}
+              style={{ flex: 1, maxWidth: 220 }}
+            >
+              <option value="">Report an issue…</option>
+              {issueOptions.map((o) => (
+                <option key={o.code} value={o.code}>{o.label}</option>
+              ))}
+            </select>
           ) : null}
 
           {canReportIssue && issuePick === 'OTHER' ? (
@@ -171,11 +177,11 @@ export function TodayPage(props: Props) {
               <input
                 value={issueOther}
                 onChange={(e) => setIssueOther(e.target.value)}
-                placeholder={issuePromptClip ? `What’s wrong with ${issuePromptClip}?` : 'What’s the issue?'}
-                style={{ minWidth: 260, flex: 1 }}
+                placeholder={issuePromptClip ? `What's wrong with ${issuePromptClip}?` : 'Describe the issue…'}
+                style={{ flex: 1 }}
               />
               <button
-                className="btn"
+                className="btn btnPrimary"
                 onClick={async () => {
                   const msg = issueOther.trim();
                   if (!msg) {
@@ -198,24 +204,26 @@ export function TodayPage(props: Props) {
                   }
                 }}
               >
-                Send
+                Submit
               </button>
             </>
           ) : null}
 
           {canBackup && backupReady ? (
             <button
-              className="btn"
+              className="btn btnSuccess"
               onClick={async () => {
                 await window.gate1?.backup?.start({});
               }}
             >
-              Start backup{backupDisk ? ` (${backupDisk})` : ''}
+              Start Backup{backupDisk ? ` → ${backupDisk}` : ''}
             </button>
           ) : null}
 
           {st === 'ATTENTION_REQUIRED' ? (
-            <button className="btn" onClick={() => window.gate1?.ui?.toggleMainWindow?.()}>Review now</button>
+            <button className="btn btnPrimary" onClick={() => window.gate1?.ui?.toggleMainWindow?.()}>
+              Review Now
+            </button>
           ) : null}
         </div>
       </div>

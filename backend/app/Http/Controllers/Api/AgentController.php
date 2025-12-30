@@ -79,6 +79,10 @@ class AgentController extends Controller
             'status' => 'required|in:online,offline',
             'latency_ms' => 'nullable|integer',
             'watched_folders' => 'nullable|array',
+            'metrics' => 'nullable|array',
+            'metrics.clips_copied' => 'nullable|integer|min:0',
+            'metrics.clips_renamed' => 'nullable|integer|min:0',
+            'metrics.clips_backed_up' => 'nullable|integer|min:0',
         ]);
 
         $agent = Agent::where('agent_id', $request->agent_id)
@@ -89,11 +93,44 @@ class AgentController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Agent not found'], 404);
         }
 
-        $agent->update([
+        $updateData = [
             'latency_ms' => $request->latency_ms,
             'watched_folders' => $request->watched_folders,
             'last_seen_at' => now(),
-        ]);
+        ];
+
+        // Handle metrics - reset daily counters if date changed
+        if ($request->has('metrics')) {
+            $metrics = $request->metrics;
+            $today = now()->toDateString();
+            
+            // Reset daily counters if it's a new day
+            if ($agent->metrics_date !== $today) {
+                $updateData['clips_copied_today'] = 0;
+                $updateData['clips_renamed_today'] = 0;
+                $updateData['clips_backed_up_today'] = 0;
+                $updateData['metrics_date'] = $today;
+            }
+
+            // Update metrics if provided (these are cumulative from agent)
+            if (isset($metrics['clips_copied'])) {
+                $delta = max(0, $metrics['clips_copied'] - ($agent->clips_copied_today ?? 0));
+                $updateData['clips_copied_today'] = $metrics['clips_copied'];
+                $updateData['clips_copied_total'] = ($agent->clips_copied_total ?? 0) + $delta;
+            }
+            if (isset($metrics['clips_renamed'])) {
+                $delta = max(0, $metrics['clips_renamed'] - ($agent->clips_renamed_today ?? 0));
+                $updateData['clips_renamed_today'] = $metrics['clips_renamed'];
+                $updateData['clips_renamed_total'] = ($agent->clips_renamed_total ?? 0) + $delta;
+            }
+            if (isset($metrics['clips_backed_up'])) {
+                $delta = max(0, $metrics['clips_backed_up'] - ($agent->clips_backed_up_today ?? 0));
+                $updateData['clips_backed_up_today'] = $metrics['clips_backed_up'];
+                $updateData['clips_backed_up_total'] = ($agent->clips_backed_up_total ?? 0) + $delta;
+            }
+        }
+
+        $agent->update($updateData);
 
         return response()->json(['ok' => true]);
     }

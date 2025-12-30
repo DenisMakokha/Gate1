@@ -46,6 +46,7 @@ import ActivityFeed from './pages/ActivityFeed';
 import Help from './pages/Help';
 import WorkAllocation from './pages/WorkAllocation';
 import LiveOperations from './pages/LiveOperations';
+import Operations from './pages/Operations';
 import Search from './pages/Search';
 
 function PrivateRoute({ children, roles }) {
@@ -96,6 +97,11 @@ function App() {
           <Route path="/live-operations" element={
             <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
               <LiveOperations />
+            </PrivateRoute>
+          } />
+          <Route path="/operations" element={
+            <PrivateRoute roles={['admin', 'team-lead', 'group-leader']}>
+              <Operations />
             </PrivateRoute>
           } />
           

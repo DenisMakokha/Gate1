@@ -173,6 +173,11 @@ export class ApiClient {
     status: 'online' | 'offline';
     latency_ms?: number;
     watched_folders?: any[];
+    metrics?: {
+      clips_copied: number;
+      clips_renamed: number;
+      clips_backed_up: number;
+    };
   }): Promise<any> {
     const res = await this.client.post('/agent/heartbeat', payload);
     return res.data;

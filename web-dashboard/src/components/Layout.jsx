@@ -77,7 +77,7 @@ export default function Layout({ children }) {
       roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead', 'backup', 'backup-lead', 'editor'],
       items: [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['admin', 'team-lead', 'group-leader', 'qa', 'qa-lead', 'backup', 'backup-lead', 'editor'] },
-        { name: 'Live Operations', href: '/live-operations', icon: Activity, roles: ['admin', 'team-lead', 'group-leader'] },
+        { name: 'Operations Center', href: '/operations', icon: Activity, roles: ['admin', 'team-lead', 'group-leader'] },
         { name: 'Analytics', href: '/analytics-dashboard', icon: BarChart3, roles: ['admin', 'team-lead', 'group-leader'] },
       ]
     },

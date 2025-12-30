@@ -115,6 +115,7 @@ export const userService = {
   assignGroups: (id, groupIds) => api.post(`/users/${id}/groups`, { group_ids: groupIds }),
   getRoles: () => api.get('/users/roles'),
   getEditorsStatus: (params) => api.get('/users/editors-status', { params }),
+  getEditorMetrics: (userId) => api.get(`/users/editors/${userId}/metrics`),
   // Bulk import and invitations
   bulkImport: (data) => api.post('/users/bulk-import', data),
   downloadTemplate: () => api.get('/users/import-template', { responseType: 'blob' }),

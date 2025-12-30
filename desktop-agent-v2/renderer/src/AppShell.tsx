@@ -14,8 +14,6 @@ import { SessionsPage } from './pages/SessionsPage';
 import { BackupPage } from './pages/BackupPage';
 import { IssuesPage } from './pages/IssuesPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { ToolsPage } from './pages/ToolsPage';
-import { AdvancedPage } from './pages/AdvancedPage';
 import { LoginPage } from './pages/LoginPage';
 
 type UiState = {
@@ -252,10 +250,8 @@ export default function AppShell() {
         ) : null}
         {!needsLogin && !needsRegistration && tab === 'sessions' ? <SessionsPage coreStatus={coreStatus} /> : null}
         {!needsLogin && !needsRegistration && tab === 'backup' ? <BackupPage coreStatus={coreStatus} /> : null}
-        {!needsLogin && !needsRegistration && tab === 'issues' ? <IssuesPage /> : null}
+        {!needsLogin && !needsRegistration && tab === 'issues' ? <IssuesPage coreStatus={coreStatus} uiState={uiState} /> : null}
         {!needsLogin && !needsRegistration && tab === 'settings' ? <SettingsPage coreStatus={coreStatus} onSaved={refreshCore} /> : null}
-        {!needsLogin && !needsRegistration && tab === 'advanced' ? <AdvancedPage coreStatus={coreStatus} onSaved={refreshCore} /> : null}
-        {!needsLogin && !needsRegistration && tab === 'tools' ? <ToolsPage /> : null}
       </div>
 
       <AttentionModal

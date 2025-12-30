@@ -341,6 +341,20 @@ class UserController extends Controller
                     $editor->last_seen_at && 
                     $editor->last_seen_at->gte(now()->subMinutes(5));
                 
+                // Get agent metrics for this editor
+                $agent = $editor->agents()->orderByDesc('last_seen_at')->first();
+                $metrics = null;
+                if ($agent) {
+                    $metrics = [
+                        'clips_copied_today' => $agent->clips_copied_today ?? 0,
+                        'clips_renamed_today' => $agent->clips_renamed_today ?? 0,
+                        'clips_backed_up_today' => $agent->clips_backed_up_today ?? 0,
+                        'clips_copied_total' => $agent->clips_copied_total ?? 0,
+                        'clips_renamed_total' => $agent->clips_renamed_total ?? 0,
+                        'clips_backed_up_total' => $agent->clips_backed_up_total ?? 0,
+                    ];
+                }
+                
                 return [
                     'id' => $editor->id,
                     'name' => $editor->name,
@@ -348,6 +362,7 @@ class UserController extends Controller
                     'is_online' => $isActuallyOnline,
                     'last_seen_at' => $editor->last_seen_at,
                     'current_activity' => $isActuallyOnline ? $editor->current_activity : null,
+                    'metrics' => $metrics,
                     'groups' => $editor->groups->map(fn($g) => [
                         'id' => $g->id,
                         'name' => $g->name,
@@ -359,12 +374,126 @@ class UserController extends Controller
         $onlineCount = $editors->where('is_online', true)->count();
         $offlineCount = $editors->where('is_online', false)->count();
 
+        // Calculate aggregate metrics
+        $totalMetrics = [
+            'clips_copied_today' => 0,
+            'clips_renamed_today' => 0,
+            'clips_backed_up_today' => 0,
+            'clips_copied_total' => 0,
+            'clips_renamed_total' => 0,
+            'clips_backed_up_total' => 0,
+        ];
+        
+        foreach ($editors as $editor) {
+            if ($editor['metrics']) {
+                $totalMetrics['clips_copied_today'] += $editor['metrics']['clips_copied_today'];
+                $totalMetrics['clips_renamed_today'] += $editor['metrics']['clips_renamed_today'];
+                $totalMetrics['clips_backed_up_today'] += $editor['metrics']['clips_backed_up_today'];
+                $totalMetrics['clips_copied_total'] += $editor['metrics']['clips_copied_total'];
+                $totalMetrics['clips_renamed_total'] += $editor['metrics']['clips_renamed_total'];
+                $totalMetrics['clips_backed_up_total'] += $editor['metrics']['clips_backed_up_total'];
+            }
+        }
+
         return response()->json([
             'editors' => $editors,
             'summary' => [
                 'total' => $editors->count(),
                 'online' => $onlineCount,
                 'offline' => $offlineCount,
+            ],
+            'metrics' => $totalMetrics,
+        ]);
+    }
+
+    /**
+     * Get detailed metrics for a specific editor
+     */
+    public function editorMetrics(int $userId): JsonResponse
+    {
+        $authUser = auth('api')->user();
+        
+        if (!$authUser->hasOperationalAccess() && !$authUser->isGroupLeader()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $editor = User::with(['roles', 'groups', 'agents'])->find($userId);
+        
+        if (!$editor) {
+            return response()->json(['error' => 'User not found'], 404);
+        }
+
+        // Get the most recent agent for this editor
+        $agent = $editor->agents()->orderByDesc('last_seen_at')->first();
+        
+        $metrics = null;
+        $agentInfo = null;
+        
+        if ($agent) {
+            $metrics = [
+                'clips_copied_today' => $agent->clips_copied_today ?? 0,
+                'clips_renamed_today' => $agent->clips_renamed_today ?? 0,
+                'clips_backed_up_today' => $agent->clips_backed_up_today ?? 0,
+                'clips_copied_total' => $agent->clips_copied_total ?? 0,
+                'clips_renamed_total' => $agent->clips_renamed_total ?? 0,
+                'clips_backed_up_total' => $agent->clips_backed_up_total ?? 0,
+                'metrics_date' => $agent->metrics_date,
+            ];
+            
+            $agentInfo = [
+                'agent_id' => $agent->agent_id,
+                'device_name' => $agent->device_name,
+                'os' => $agent->os,
+                'agent_version' => $agent->agent_version,
+                'latency_ms' => $agent->latency_ms,
+                'last_seen_at' => $agent->last_seen_at,
+                'status' => $agent->status_display,
+            ];
+        }
+
+        // Get session stats for this editor
+        $sessionStats = \App\Models\CameraSession::where('editor_id', $userId)
+            ->selectRaw('COUNT(*) as total_sessions')
+            ->selectRaw('SUM(files_detected) as total_files_detected')
+            ->selectRaw('SUM(files_copied) as total_files_copied')
+            ->first();
+
+        // Get issue stats
+        $issueStats = \App\Models\Issue::where('reported_by', $userId)
+            ->selectRaw('COUNT(*) as total_reported')
+            ->selectRaw('SUM(CASE WHEN acknowledged = 1 THEN 1 ELSE 0 END) as acknowledged')
+            ->selectRaw('SUM(CASE WHEN resolved_at IS NOT NULL THEN 1 ELSE 0 END) as resolved')
+            ->first();
+
+        $isActuallyOnline = $editor->is_online && 
+            $editor->last_seen_at && 
+            $editor->last_seen_at->gte(now()->subMinutes(5));
+
+        return response()->json([
+            'editor' => [
+                'id' => $editor->id,
+                'name' => $editor->name,
+                'email' => $editor->email,
+                'is_online' => $isActuallyOnline,
+                'last_seen_at' => $editor->last_seen_at,
+                'current_activity' => $isActuallyOnline ? $editor->current_activity : null,
+                'groups' => $editor->groups->map(fn($g) => [
+                    'id' => $g->id,
+                    'name' => $g->name,
+                    'group_code' => $g->group_code,
+                ]),
+            ],
+            'agent' => $agentInfo,
+            'metrics' => $metrics,
+            'sessions' => [
+                'total' => $sessionStats->total_sessions ?? 0,
+                'files_detected' => $sessionStats->total_files_detected ?? 0,
+                'files_copied' => $sessionStats->total_files_copied ?? 0,
+            ],
+            'issues' => [
+                'total_reported' => $issueStats->total_reported ?? 0,
+                'acknowledged' => $issueStats->acknowledged ?? 0,
+                'resolved' => $issueStats->resolved ?? 0,
             ],
         ]);
     }

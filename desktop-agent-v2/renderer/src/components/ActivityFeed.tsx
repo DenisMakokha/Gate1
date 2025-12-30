@@ -20,11 +20,16 @@ export function ActivityFeed(props: Props) {
   return (
     <div className="card">
       <div className="cardHeader">
-        <strong>Activity</strong>
-        <span className="muted">last {items.length}</span>
+        <strong>Recent Activity</strong>
+        <span className="pill pillNeutral">{items.length} events</span>
       </div>
       <div className="feed">
-        {items.length === 0 ? <div className="muted">No activity yet</div> : null}
+        {items.length === 0 ? (
+          <div className="emptyState">
+            <div className="emptyStateTitle">No activity yet</div>
+            <div className="emptyStateMsg">Events will appear here as they happen</div>
+          </div>
+        ) : null}
         {items.map((a) => (
           <div key={a.id} className="feedRow">
             <div className="feedTime">{fmt(a.createdAt)}</div>

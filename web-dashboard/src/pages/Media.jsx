@@ -5,6 +5,39 @@ import { Search, Video, Filter, Download, Eye, AlertTriangle, Play, X, Lock } fr
 
 // Video Playback Modal Component
 function PlaybackModal({ media, onClose }) {
+  const [playbackSource, setPlaybackSource] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!media?.media_id) return;
+    
+    const fetchPlaybackSource = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await mediaService.getPlaybackSource(media.media_id);
+        setPlaybackSource(response.source);
+        
+        // Log playback attempt
+        await mediaService.logPlayback(media.media_id, { 
+          source_type: response.source?.type || 'unknown' 
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Failed to get playback source:', err);
+        setError('Failed to load playback source');
+        // Fallback to preview_url if available
+        if (media.preview_url) {
+          setPlaybackSource({ type: 'fallback', url: media.preview_url, available: true });
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlaybackSource();
+  }, [media?.media_id]);
+
   if (!media) return null;
   
   return (
@@ -23,12 +56,19 @@ function PlaybackModal({ media, onClose }) {
           </button>
         </div>
         <div className="aspect-video bg-black">
-          {media.preview_url ? (
+          {loading ? (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                <p>Loading playback source...</p>
+              </div>
+            </div>
+          ) : playbackSource?.available && playbackSource?.url ? (
             <video
               controls
               autoPlay
               className="w-full h-full"
-              src={media.preview_url}
+              src={playbackSource.url}
             >
               Your browser does not support video playback.
             </video>
@@ -36,8 +76,15 @@ function PlaybackModal({ media, onClose }) {
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               <div className="text-center">
                 <Video className="w-16 h-16 mx-auto mb-2 opacity-50" />
-                <p>Preview not available</p>
-                <p className="text-sm">File is stored on backup disk</p>
+                <p>{error || 'Preview not available'}</p>
+                <p className="text-sm mt-1">
+                  {playbackSource?.label || 'File is stored on backup disk'}
+                </p>
+                {playbackSource?.type === 'editor_stream' && (
+                  <p className="text-xs mt-2 text-yellow-400">
+                    Editor must be online for streaming
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -61,6 +108,13 @@ function PlaybackModal({ media, onClose }) {
               <span className="ml-2 font-medium">{media.status}</span>
             </div>
           </div>
+          {playbackSource && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <span className="text-xs text-gray-500">
+                Source: <span className="font-medium">{playbackSource.label || playbackSource.type}</span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

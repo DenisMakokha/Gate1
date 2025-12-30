@@ -38,8 +38,13 @@ export function LoginPage(props: Props) {
       setStep('register');
       props.onDone();
     } catch (e: any) {
-      setMsg(e?.message ?? 'Login failed');
-      await api?.ui?.toast?.({ kind: 'error', title: 'Login failed', message: e?.message ?? 'unknown' });
+      // Extract validation error message from Axios 422 response
+      const errMsg = e?.response?.data?.message 
+        || e?.response?.data?.errors?.email?.[0]
+        || e?.message 
+        || 'Login failed';
+      setMsg(errMsg);
+      await api?.ui?.toast?.({ kind: 'error', title: 'Login failed', message: errMsg });
     } finally {
       setBusy(false);
     }
@@ -80,42 +85,81 @@ export function LoginPage(props: Props) {
 
   return (
     <div className="page">
-      <div className="card">
+      <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
         <div className="cardHeader">
-          <strong>Sign in</strong>
-          <span className="muted">required</span>
+          <strong>{step === 'login' ? 'Sign In' : 'Setup Profile'}</strong>
+          <span className="pill pillBlue">Required</span>
         </div>
 
-        <div className="muted" style={{ marginTop: 6 }}>
-          This agent needs a quick sign-in before it can connect to a live event session.
+        <div className="muted">
+          {step === 'login' 
+            ? 'Sign in to connect this agent to your live event sessions.'
+            : 'Set up your editor profile to label backups and sessions.'}
         </div>
 
         {step === 'login' ? (
           <>
-            <div className="sectionTitle" style={{ marginTop: 16 }}>Account</div>
-            <div className="row" style={{ marginTop: 8 }}>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={{ minWidth: 240, flex: 1 }} />
-              <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password" style={{ minWidth: 200, flex: 1 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+              <input 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                placeholder="Email address" 
+                type="email"
+                autoComplete="email"
+              />
+              <input 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                placeholder="Password" 
+                type="password"
+                autoComplete="current-password"
+              />
             </div>
-            <div className="row" style={{ marginTop: 8, gap: 8 }}>
-              <button className="btn" onClick={doLogin} disabled={busy || !api?.auth?.login}>Sign in</button>
-              {msg ? <span className="muted">{msg}</span> : null}
+            {msg && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{msg}</div>}
+            <div style={{ marginTop: 20 }}>
+              <button 
+                className="btn btnPrimary" 
+                onClick={doLogin} 
+                disabled={busy || !api?.auth?.login}
+                style={{ width: '100%', padding: '12px 16px' }}
+              >
+                {busy ? 'Signing in…' : 'Sign In'}
+              </button>
             </div>
           </>
         ) : null}
 
         {step === 'register' ? (
           <>
-            <div className="sectionTitle" style={{ marginTop: 16 }}>Editor profile</div>
-            <div className="muted">This labels backups and sessions for the event team.</div>
-            <div className="row" style={{ marginTop: 8 }}>
-              <input value={editorName} onChange={(e) => setEditorName(e.target.value)} placeholder="Editor name" style={{ minWidth: 240, flex: 1 }} />
-              <input value={groupCode} onChange={(e) => setGroupCode(e.target.value)} placeholder="Group code (optional)" style={{ minWidth: 200, flex: 1 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+              <input 
+                value={editorName} 
+                onChange={(e) => setEditorName(e.target.value)} 
+                placeholder="Your name (e.g. John Smith)" 
+              />
+              <input 
+                value={groupCode} 
+                onChange={(e) => setGroupCode(e.target.value)} 
+                placeholder="Group code (optional)" 
+              />
             </div>
-            <div className="row" style={{ marginTop: 8, gap: 8 }}>
-              <button className="btn" onClick={doRegister} disabled={busy || !api?.agent?.register}>Continue</button>
-              <button className="btn" onClick={logout} disabled={busy || !api?.auth?.logout}>Sign out</button>
-              {msg ? <span className="muted">{msg}</span> : null}
+            {msg && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{msg}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button 
+                className="btn btnPrimary" 
+                onClick={doRegister} 
+                disabled={busy || !api?.agent?.register}
+                style={{ flex: 1, padding: '12px 16px' }}
+              >
+                {busy ? 'Setting up…' : 'Continue'}
+              </button>
+              <button 
+                className="btn" 
+                onClick={logout} 
+                disabled={busy || !api?.auth?.logout}
+              >
+                Sign Out
+              </button>
             </div>
           </>
         ) : null}

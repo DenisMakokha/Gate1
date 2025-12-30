@@ -67,7 +67,7 @@ export function BrandHero(props: Props) {
       <div className="mascotWrap">
         <div className={`mascotCard mascotCard--${mascotColor}`}>
           <div className="mascotArt" aria-hidden="true">
-            <img src={mascotUrl} alt="" style={{ width: 240, height: 160, objectFit: 'contain' }} />
+            <img src={mascotUrl} alt="" style={{ width: 100, height: 80, objectFit: 'contain' }} />
           </div>
           <div className="mascotText">
             <div className="mascotHeadline">Ready to guide the workflow</div>
