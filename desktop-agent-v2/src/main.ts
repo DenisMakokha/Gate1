@@ -2986,11 +2986,34 @@ function registerIpc() {
     const snap = await snapshotEngine.loadSnapshot(active.sessionId);
     if (!snap) return { ok: false, reason: 'no_snapshot' };
 
+    // Filter snapshot to only include renamed files (ready for backup)
+    // Renamed files are the ones that have been reviewed and are ready for backup
+    const renamedFileNames = copyState?.renamedFiles ? new Set(copyState.renamedFiles.keys()) : new Set<string>();
+    const filteredFiles = snap.files.filter(f => renamedFileNames.has(f.name));
+    
+    if (filteredFiles.length === 0) {
+      return { ok: false, reason: 'no_renamed_files', message: 'No files have been renamed yet. Rename files after reviewing to mark them ready for backup.' };
+    }
+
+    // Create a filtered snapshot with only renamed files
+    const filteredSnap = {
+      ...snap,
+      files: filteredFiles,
+      fileCount: filteredFiles.length,
+      totalSizeBytes: filteredFiles.reduce((sum, f) => sum + f.sizeBytes, 0),
+    };
+
     try {
-      audit.info('backup.manual_start', { sessionId: active.sessionId, serverSessionId: active.serverSessionId, destRoot });
-      mainWindow?.webContents?.send('backup:starting', { sessionId: active.sessionId });
-      setUiState('BACKUP_IN_PROGRESS', { sessionId: active.sessionId }, { bubbleTitle: 'Backup in progress…', bubbleSub: '', bubbleMs: 2500 });
-      await backupEngine.start({ snapshot: snap, destRoot });
+      audit.info('backup.manual_start', { 
+        sessionId: active.sessionId, 
+        serverSessionId: active.serverSessionId, 
+        destRoot,
+        totalFiles: snap.files.length,
+        renamedFiles: filteredFiles.length,
+      });
+      mainWindow?.webContents?.send('backup:starting', { sessionId: active.sessionId, renamedCount: filteredFiles.length });
+      setUiState('BACKUP_IN_PROGRESS', { sessionId: active.sessionId }, { bubbleTitle: 'Backup in progress…', bubbleSub: `${filteredFiles.length} renamed files`, bubbleMs: 2500 });
+      await backupEngine.start({ snapshot: filteredSnap, destRoot });
       const stillActive = sdSessionEngine?.getActive?.();
       setUiState(stillActive && stillActive.status === 'active' ? 'SESSION_ACTIVE' : 'IDLE', { activeSession: stillActive });
 
