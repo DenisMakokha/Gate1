@@ -12,10 +12,12 @@ export default function Groups() {
   const [members, setMembers] = useState([]);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
+  const [availableLeaders, setAvailableLeaders] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    leader_id: '',
     leader_phone: '',
   });
 
@@ -43,14 +45,29 @@ export default function Groups() {
       }
       await groupService.create({
         ...formData,
+        leader_id: formData.leader_id ? Number(formData.leader_id) : null,
         event_id: activeEvent.id,
       });
       setShowModal(false);
-      setFormData({ name: '', description: '', leader_phone: '' });
+      setFormData({ name: '', description: '', leader_id: '', leader_phone: '' });
       loadData();
     } catch (error) {
       console.error('Failed to create group:', error);
     }
+  };
+
+  const openCreateGroupModal = async () => {
+    if (!activeEvent?.id) return;
+    try {
+      const response = await userService.getAll({ per_page: 200 });
+      const users = response.data || response || [];
+      setAvailableLeaders(users);
+    } catch (error) {
+      console.error('Failed to load users for leader selection:', error);
+      setAvailableLeaders([]);
+    }
+    setFormData({ name: '', description: '', leader_id: '', leader_phone: '' });
+    setShowModal(true);
   };
 
   const loadMembers = async (groupId) => {
@@ -110,7 +127,7 @@ export default function Groups() {
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openCreateGroupModal}
           disabled={!activeEvent?.id}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
@@ -275,6 +292,21 @@ export default function Groups() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   rows={2}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Group Leader</label>
+                <select
+                  value={formData.leader_id}
+                  onChange={(e) => setFormData({ ...formData, leader_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Not assigned</option>
+                  {availableLeaders.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name} ({user.email})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Leader Phone</label>
