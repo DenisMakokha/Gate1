@@ -27,6 +27,13 @@ export function BrandHero(props: Props) {
     return { kind: 'neutral' as const, label: 'Starting…' };
   })();
 
+  // Mascot color: green when connected to event + online, red when offline, blue default
+  const mascotColor = (() => {
+    if (props.online === false) return 'red';
+    if (props.online === true && props.activeEvent?.id) return 'green';
+    return 'blue'; // default/unconnected state
+  })();
+
   const mascotUrl = new URL('../assets/mascot.svg', import.meta.url).toString();
 
   const activeEventLabel = (() => {
@@ -58,7 +65,7 @@ export function BrandHero(props: Props) {
       </div>
 
       <div className="mascotWrap">
-        <div className="mascotCard">
+        <div className={`mascotCard mascotCard--${mascotColor}`}>
           <div className="mascotArt" aria-hidden="true">
             <img src={mascotUrl} alt="" style={{ width: 240, height: 160, objectFit: 'contain' }} />
           </div>
