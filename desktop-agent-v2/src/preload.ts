@@ -40,6 +40,7 @@ const allowedEventChannels = new Set<string>([
   'backup:complete',
   'backup:error',
   'backup:status',
+  'backup:needs-binding',
   'issues:updated',
   'session:progress',
   'attention:decision-recorded',

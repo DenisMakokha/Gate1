@@ -7,6 +7,7 @@ import type { ActivityItem, BannerItem, ToastItem } from './components/ui';
 import { useUiEvents } from './components/useUiEvents';
 import { AttentionModal, type AttentionPayload } from './components/AttentionModal';
 import { SdBindingModal, type SdBindingPayload } from './components/SdBindingModal';
+import { BackupDriveBindingModal, type BackupDrivePayload } from './components/BackupDriveBindingModal';
 
 import { TodayPage } from './pages/TodayPage';
 import { SessionsPage } from './pages/SessionsPage';
@@ -61,6 +62,9 @@ export default function AppShell() {
 
   const [bindingOpen, setBindingOpen] = useState(false);
   const [bindingPayload, setBindingPayload] = useState<SdBindingPayload | null>(null);
+
+  const [backupBindingOpen, setBackupBindingOpen] = useState(false);
+  const [backupBindingPayload, setBackupBindingPayload] = useState<BackupDrivePayload | null>(null);
 
   const [snapshotProgress, setSnapshotProgress] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<any>(null);
@@ -121,6 +125,16 @@ export default function AppShell() {
           filesPending: d?.filesPending,
           filename: d?.filename,
         });
+      })
+    );
+
+    unsubs.push(
+      api.events.on('backup:needs-binding', (d: any) => {
+        setBackupBindingPayload({
+          drivePath: String(d?.drivePath ?? ''),
+          driveLabel: String(d?.driveLabel ?? ''),
+        });
+        setBackupBindingOpen(true);
       })
     );
 
@@ -257,6 +271,17 @@ export default function AppShell() {
         payload={bindingPayload}
         onClose={() => {
           setBindingOpen(false);
+        }}
+        onBound={() => {
+          void refreshCore();
+        }}
+      />
+
+      <BackupDriveBindingModal
+        open={backupBindingOpen}
+        payload={backupBindingPayload}
+        onClose={() => {
+          setBackupBindingOpen(false);
         }}
         onBound={() => {
           void refreshCore();

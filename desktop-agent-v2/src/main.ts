@@ -99,6 +99,8 @@ type BackupHashScanCache = {
   map: Map<string, { count: number; examplePath: string }>;
 };
 
+let lastPromptedUnboundDrive: string | null = null;
+
 async function detectBackupDiskReady(): Promise<void> {
   // Only meaningful during an active session.
   const active = sdSessionEngine?.getActive?.() ?? null;
@@ -109,6 +111,8 @@ async function detectBackupDiskReady(): Promise<void> {
 
   const cfg = store.get('config');
   const candidates: string[] = [];
+  const boundDrives = cfg?.boundBackupDrives ?? [];
+  const boundPaths = new Set(boundDrives.map((d: any) => d.drivePath));
 
   const last = store.get('lastBackupSummary') as any;
   const lastDest = last?.destRoot ? String(last.destRoot) : null;
@@ -126,16 +130,31 @@ async function detectBackupDiskReady(): Promise<void> {
     const info = await checkWritableDir(p);
     if (info.exists && info.writable) {
       const key = `${active.sessionId}:${p}`;
+      
+      // Check if this drive is bound
+      const isBound = boundPaths.has(p);
+      
       // Bubble only when it becomes ready (or changes disk)
       if (lastBackupReadyKey !== key) {
         lastBackupReadyKey = key;
-        uiStateCtx = { ...(uiStateCtx ?? {}), backupReady: true, recommendedBackupRoot: p, recommendedBackupDisk: deriveDiskLabel(p) };
+        uiStateCtx = { ...(uiStateCtx ?? {}), backupReady: true, recommendedBackupRoot: p, recommendedBackupDisk: deriveDiskLabel(p), backupDriveBound: isBound };
         emitUiState();
 
         const nowMs = Date.now();
         if (nowMs - lastBackupReadyBubbleAtMs > 10_000) {
           lastBackupReadyBubbleAtMs = nowMs;
-          showMessageBubble('Backup disk ready.', `Disk: ${deriveDiskLabel(p)} • Click to open`, 3500);
+          
+          if (!isBound && lastPromptedUnboundDrive !== p) {
+            // Prompt to bind the drive
+            lastPromptedUnboundDrive = p;
+            mainWindow?.webContents?.send('backup:needs-binding', {
+              drivePath: p,
+              driveLabel: deriveDiskLabel(p),
+            });
+            showMessageBubble('New backup drive detected.', `${deriveDiskLabel(p)} • Click to configure`, 4500);
+          } else {
+            showMessageBubble('Backup disk ready.', `Disk: ${deriveDiskLabel(p)} • Click to open`, 3500);
+          }
         }
       }
       return;
@@ -144,7 +163,7 @@ async function detectBackupDiskReady(): Promise<void> {
 
   // No disks ready
   lastBackupReadyKey = null;
-  uiStateCtx = { ...(uiStateCtx ?? {}), backupReady: false, recommendedBackupRoot: null, recommendedBackupDisk: null };
+  uiStateCtx = { ...(uiStateCtx ?? {}), backupReady: false, recommendedBackupRoot: null, recommendedBackupDisk: null, backupDriveBound: false };
   emitUiState();
 }
 
