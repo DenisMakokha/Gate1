@@ -3287,6 +3287,13 @@ function registerIpc() {
     audit.info('auth.logout');
     await clearToken();
     api.setToken(null);
+    if (streamTunnelWs) {
+      try {
+        streamTunnelWs.close();
+      } catch {
+        // ignore
+      }
+    }
     lastAuthOk = false;
     updateMascotConnectivity();
     return { ok: true };
@@ -3338,6 +3345,7 @@ function registerIpc() {
         // become "ready" quickly: sync any queued ops and refresh config (non-blocking)
         void drainQueueOnce();
         void refreshAgentConfig();
+        startStreamTunnelWs();
       }
 
       return res;
