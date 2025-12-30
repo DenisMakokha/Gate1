@@ -896,7 +896,25 @@ function startStreamTunnelWs(): void {
   const agentId = store.get('agentId');
   if (!agentId) return;
 
-  const apiKey = process.env.STREAM_TUNNEL_API_KEY ?? '';
+  const tunnelApiKey = process.env.STREAM_TUNNEL_API_KEY ?? '';
+
+  const fetchWsToken = async (): Promise<string | null> => {
+    const tokenData = await getToken();
+    if (!tokenData || isTokenExpired(tokenData.expiryIso)) return null;
+    const deviceId = getOrCreateDeviceId();
+    try {
+      const res: any = await api.request({
+        method: 'POST',
+        url: '/agent/stream/ws-token',
+        data: { agent_id: agentId, device_id: deviceId },
+        timeoutMs: 10000,
+      });
+      const t = typeof res?.token === 'string' ? res.token : null;
+      return t;
+    } catch {
+      return null;
+    }
+  };
 
   const connect = () => {
     if (isQuitting) return;
@@ -914,7 +932,19 @@ function startStreamTunnelWs(): void {
       streamTunnelWs = ws;
 
       ws.on('open', () => {
-        ws.send(JSON.stringify({ kind: 'hello', agent_id: agentId, api_key: apiKey }));
+        void (async () => {
+          const token = await fetchWsToken();
+          if (!token) {
+            try {
+              ws.close();
+            } catch {
+              // ignore
+            }
+            return;
+          }
+
+          ws.send(JSON.stringify({ kind: 'hello', token, api_key: tunnelApiKey }));
+        })();
       });
 
       ws.on('message', async (raw) => {
@@ -993,9 +1023,9 @@ function startStreamTunnelWs(): void {
                 ...(statusCode === 206 ? { 'Content-Range': `bytes ${safeStart}-${safeStart + bytesRead - 1}/${size}` } : {}),
                 'Content-Length': String(bytesRead),
               },
-              data_base64: out.toString('base64'),
             })
           );
+          ws.send(out);
         } finally {
           await fh.close();
         }

@@ -12,6 +12,45 @@ use Illuminate\Support\Str;
 
 class AgentStreamController extends Controller
 {
+    public function wsToken(Request $request): JsonResponse
+    {
+        $request->validate([
+            'agent_id' => 'required|string|exists:agents,agent_id',
+            'device_id' => 'required|string',
+        ]);
+
+        $user = auth('api')->user();
+
+        $agent = Agent::where('agent_id', $request->agent_id)
+            ->where('device_id', $request->device_id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$agent) {
+            return response()->json(['error' => 'Agent not found'], 404);
+        }
+
+        $secret = (string) env('STREAM_TUNNEL_SIGNING_SECRET', '');
+        if ($secret === '') {
+            return response()->json(['error' => 'Tunnel signing secret not configured'], 500);
+        }
+
+        $payload = [
+            'agent_id' => $agent->agent_id,
+            'device_id' => $agent->device_id,
+            'exp' => now()->addSeconds(60)->getTimestamp(),
+            'nonce' => (string) Str::uuid(),
+        ];
+
+        $payloadB64 = rtrim(strtr(base64_encode(json_encode($payload)), '+/', '-_'), '=');
+        $sig = hash_hmac('sha256', $payloadB64, $secret);
+
+        return response()->json([
+            'token' => $payloadB64 . '.' . $sig,
+            'exp' => $payload['exp'],
+        ]);
+    }
+
     public function poll(Request $request): JsonResponse
     {
         $request->validate([

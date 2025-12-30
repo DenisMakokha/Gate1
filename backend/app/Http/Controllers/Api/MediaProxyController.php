@@ -52,6 +52,11 @@ class MediaProxyController extends Controller
         $tunnelHttpUrl = env('STREAM_TUNNEL_HTTP_URL');
         if ($tunnelHttpUrl) {
             try {
+                $secret = (string) env('STREAM_TUNNEL_SIGNING_SECRET', '');
+                if ($secret === '') {
+                    throw new \RuntimeException('missing_signing_secret');
+                }
+
                 $range = $request->header('Range');
                 $start = 0;
                 $end = null;
@@ -72,31 +77,41 @@ class MediaProxyController extends Controller
                 }
 
                 $http = Http::timeout(16);
-                $key = env('STREAM_TUNNEL_API_KEY');
-                if ($key) {
-                    $http = $http->withHeaders(['X-Tunnel-Key' => $key]);
-                }
 
-                $resp = $http->post(rtrim($tunnelHttpUrl, '/') . '/stream/request', [
+                $exp = now()->addSeconds(10)->getTimestamp();
+                $nonce = (string) Str::uuid();
+
+                $body = [
                     'agent_id' => $agent->agent_id,
                     'file_path' => $media->file_path,
                     'start' => $start,
                     'end' => $end,
-                ]);
+                    'media_id' => $media->media_id,
+                    'user_id' => $user->id,
+                    'exp' => $exp,
+                    'nonce' => $nonce,
+                ];
 
-                if ($resp->ok()) {
-                    $payload = $resp->json();
-                    $status = (int) ($payload['status'] ?? 500);
-                    $headers = is_array($payload['headers'] ?? null) ? $payload['headers'] : [];
-                    $b64 = $payload['data_base64'] ?? null;
-                    $bytes = $b64 ? base64_decode($b64) : '';
+                $payloadB64 = rtrim(strtr(base64_encode(json_encode($body)), '+/', '-_'), '=');
+                $sig = hash_hmac('sha256', $payloadB64, $secret);
+                $body['sig'] = $sig;
 
-                    $r = new Response($bytes, $status);
-                    foreach ($headers as $k => $v) {
-                        $r->headers->set($k, $v);
-                    }
-                    return $r;
+                $resp = $http->post(rtrim($tunnelHttpUrl, '/') . '/stream/request', $body);
+
+                if (!$resp->ok()) {
+                    throw new \RuntimeException('tunnel_http_error');
                 }
+
+                $r = new Response($resp->body(), $resp->status());
+                foreach ($resp->headers() as $k => $vals) {
+                    if (!is_array($vals)) {
+                        $vals = [$vals];
+                    }
+                    foreach ($vals as $v) {
+                        $r->headers->set($k, $v, false);
+                    }
+                }
+                return $r;
             } catch (\Throwable $e) {
                 // fall back
             }

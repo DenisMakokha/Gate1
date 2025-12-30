@@ -79,6 +79,9 @@ Route::middleware('auth:api')->group(function () {
         // Streaming tunnel (agent long-poll)
         Route::post('/stream/poll', [\App\Http\Controllers\Api\AgentStreamController::class, 'poll']);
         Route::post('/stream/respond', [\App\Http\Controllers\Api\AgentStreamController::class, 'respond']);
+
+        // Streaming tunnel (persistent WS) auth token
+        Route::post('/stream/ws-token', [\App\Http\Controllers\Api\AgentStreamController::class, 'wsToken']);
     });
 
     // Camera session routes
