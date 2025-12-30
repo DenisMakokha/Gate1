@@ -26,6 +26,7 @@ export default function Events() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingActivation, setPendingActivation] = useState(null);
@@ -72,8 +73,13 @@ export default function Events() {
           ? `${formData.end_date}T${formData.end_time}:00` 
           : null,
       };
-      await eventService.create(submitData);
+      if (editingEvent?.id) {
+        await eventService.update(editingEvent.id, submitData);
+      } else {
+        await eventService.create(submitData);
+      }
       setShowModal(false);
+      setEditingEvent(null);
       setFormData({ 
         name: '', 
         description: '', 
@@ -87,8 +93,41 @@ export default function Events() {
       });
       loadEvents();
     } catch (error) {
-      console.error('Failed to create event:', error);
+      console.error(editingEvent?.id ? 'Failed to update event:' : 'Failed to create event:', error);
     }
+  };
+
+  const openCreateModal = () => {
+    setEditingEvent(null);
+    setFormData({
+      name: '',
+      description: '',
+      location: '',
+      start_date: '',
+      start_time: '09:00',
+      end_date: '',
+      end_time: '17:00',
+      auto_delete_enabled: true,
+      auto_delete_days_after_end: 30,
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (event) => {
+    if (!event) return;
+    setEditingEvent(event);
+    setFormData({
+      name: event.name ?? '',
+      description: event.description ?? '',
+      location: event.location ?? '',
+      start_date: (event.start_datetime ?? event.start_date ?? '').slice(0, 10),
+      start_time: event.start_datetime ? new Date(event.start_datetime).toISOString().slice(11, 16) : '09:00',
+      end_date: (event.end_datetime ?? event.end_date ?? '').slice(0, 10),
+      end_time: event.end_datetime ? new Date(event.end_datetime).toISOString().slice(11, 16) : '17:00',
+      auto_delete_enabled: event.auto_delete_enabled ?? true,
+      auto_delete_days_after_end: event.auto_delete_days_after_end ?? 30,
+    });
+    setShowModal(true);
   };
 
   const formatDateTime = (dateStr, timeStr) => {
@@ -182,7 +221,7 @@ export default function Events() {
           <p className="text-gray-500">Manage healing service events</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openCreateModal}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
           <Plus className="w-5 h-5" />
@@ -300,6 +339,12 @@ export default function Events() {
                   </button>
                 )}
                 <button
+                  onClick={() => openEditModal(event)}
+                  className="flex-1 text-center py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded"
+                >
+                  Edit
+                </button>
+                <button
                   onClick={() => { setSelectedEvent(event); setShowDetailModal(true); }}
                   className="flex-1 text-center py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded"
                 >
@@ -315,7 +360,9 @@ export default function Events() {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl w-full max-w-md p-6 m-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Create New Event</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-6">
+              {editingEvent?.id ? 'Edit Event' : 'Create New Event'}
+            </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Event Name</label>
@@ -432,7 +479,7 @@ export default function Events() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => { setShowModal(false); setEditingEvent(null); }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
@@ -441,7 +488,7 @@ export default function Events() {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  Create Event
+                  {editingEvent?.id ? 'Save Changes' : 'Create Event'}
                 </button>
               </div>
             </form>
