@@ -8,6 +8,7 @@ export default function Groups() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -39,6 +40,12 @@ export default function Groups() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      if (editingGroup?.id) {
+        await groupService.update(editingGroup.id, {
+          ...formData,
+          leader_id: formData.leader_id ? Number(formData.leader_id) : null,
+        });
+      } else {
       if (!activeEvent?.id) {
         console.error('No active event set; cannot create group');
         return;
@@ -48,11 +55,13 @@ export default function Groups() {
         leader_id: formData.leader_id ? Number(formData.leader_id) : null,
         event_id: activeEvent.id,
       });
+      }
       setShowModal(false);
+      setEditingGroup(null);
       setFormData({ name: '', description: '', leader_id: '', leader_phone: '' });
       loadData();
     } catch (error) {
-      console.error('Failed to create group:', error);
+      console.error(editingGroup?.id ? 'Failed to update group:' : 'Failed to create group:', error);
     }
   };
 
@@ -66,7 +75,29 @@ export default function Groups() {
       console.error('Failed to load users for leader selection:', error);
       setAvailableLeaders([]);
     }
+    setEditingGroup(null);
     setFormData({ name: '', description: '', leader_id: '', leader_phone: '' });
+    setShowModal(true);
+  };
+
+  const openEditGroupModal = async () => {
+    if (!selectedGroup) return;
+    try {
+      const response = await userService.getAll({ per_page: 200 });
+      const users = response.data || response || [];
+      setAvailableLeaders(users);
+    } catch (error) {
+      console.error('Failed to load users for leader selection:', error);
+      setAvailableLeaders([]);
+    }
+
+    setEditingGroup(selectedGroup);
+    setFormData({
+      name: selectedGroup.name ?? '',
+      description: selectedGroup.description ?? '',
+      leader_id: selectedGroup.leader?.id ? String(selectedGroup.leader.id) : '',
+      leader_phone: selectedGroup.leader_phone ?? '',
+    });
     setShowModal(true);
   };
 
@@ -185,11 +216,19 @@ export default function Groups() {
                     </h2>
                     <p className="text-gray-500">{selectedGroup.description || 'No description'}</p>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    selectedGroup.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {selectedGroup.is_active ? 'Active' : 'Inactive'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      selectedGroup.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {selectedGroup.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    <button
+                      onClick={openEditGroupModal}
+                      className="px-3 py-1 rounded text-xs font-medium text-gray-700 hover:bg-gray-100 border border-gray-200"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -266,7 +305,9 @@ export default function Groups() {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl w-full max-w-md p-6 m-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Create New Group</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-6">
+              {editingGroup?.id ? 'Edit Group' : 'Create New Group'}
+            </h2>
             {!activeEvent?.id && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
                 You must activate an event before creating groups.
@@ -321,17 +362,20 @@ export default function Groups() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingGroup(null);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!activeEvent?.id}
+                  disabled={!editingGroup?.id && !activeEvent?.id}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  Create Group
+                  {editingGroup?.id ? 'Save Changes' : 'Create Group'}
                 </button>
               </div>
             </form>
