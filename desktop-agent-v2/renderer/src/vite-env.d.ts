@@ -32,6 +32,11 @@ declare global {
       };
       sd?: {
         removalDecision: (payload: { decision: 'reinsert' | 'confirm_early_removal' }) => Promise<any>;
+        bind: (payload: { hardwareId: string; cameraNumber: number; sdLabel: string; capacityBytes?: number }) => Promise<any>;
+        getMounted: () => Promise<any>;
+      };
+      session?: {
+        updateProgress: (payload: { filesCopied: number; filesPending: number }) => Promise<any>;
       };
       events?: {
         on: (channel: string, handler: (...args: any[]) => void) => () => void;

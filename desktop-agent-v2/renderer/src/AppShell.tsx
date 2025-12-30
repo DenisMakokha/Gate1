@@ -6,6 +6,7 @@ import { Toasts } from './components/Toasts';
 import type { ActivityItem, BannerItem, ToastItem } from './components/ui';
 import { useUiEvents } from './components/useUiEvents';
 import { AttentionModal, type AttentionPayload } from './components/AttentionModal';
+import { SdBindingModal, type SdBindingPayload } from './components/SdBindingModal';
 
 import { TodayPage } from './pages/TodayPage';
 import { SessionsPage } from './pages/SessionsPage';
@@ -58,6 +59,9 @@ export default function AppShell() {
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [attentionPayload, setAttentionPayload] = useState<AttentionPayload | null>(null);
 
+  const [bindingOpen, setBindingOpen] = useState(false);
+  const [bindingPayload, setBindingPayload] = useState<SdBindingPayload | null>(null);
+
   const [snapshotProgress, setSnapshotProgress] = useState<any>(null);
   const [copyProgress, setCopyProgress] = useState<{ filesCopied?: number; filesPending?: number; filename?: string } | null>(null);
 
@@ -77,6 +81,18 @@ export default function AppShell() {
       api.events.on('attention:required', (d: any) => {
         setAttentionPayload({ reason: String(d?.reason ?? 'UNKNOWN'), data: d?.data ?? null });
         setAttentionOpen(true);
+      })
+    );
+
+    unsubs.push(
+      api.events.on('sd:needs-binding', (d: any) => {
+        setBindingPayload({
+          hardwareId: String(d?.hardwareId ?? ''),
+          mountPath: String(d?.mountPath ?? ''),
+          driveLetter: String(d?.driveLetter ?? ''),
+          sessionId: d?.sessionId,
+        });
+        setBindingOpen(true);
       })
     );
 
@@ -230,6 +246,17 @@ export default function AppShell() {
         payload={attentionPayload}
         onClose={() => {
           setAttentionOpen(false);
+        }}
+      />
+
+      <SdBindingModal
+        open={bindingOpen}
+        payload={bindingPayload}
+        onClose={() => {
+          setBindingOpen(false);
+        }}
+        onBound={() => {
+          void refreshCore();
         }}
       />
 
