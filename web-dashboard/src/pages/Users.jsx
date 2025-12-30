@@ -26,7 +26,7 @@ function UserModal({ user, roles, groups, onClose, onSave }) {
     email: user?.email || '',
     phone: user?.phone || '',
     password: '',
-    roles: user?.roles?.map(r => r.slug) || ['editor'],
+    role: user?.roles?.[0]?.slug || 'editor',
     is_active: user?.is_active ?? true,
   });
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,8 @@ function UserModal({ user, roles, groups, onClose, onSave }) {
     setError('');
 
     try {
-      const data = { ...formData };
+      const data = { ...formData, roles: [formData.role] };
+      delete data.role;
       if (!data.password) delete data.password;
       
       if (user) {
@@ -57,15 +58,6 @@ function UserModal({ user, roles, groups, onClose, onSave }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const toggleRole = (roleSlug) => {
-    setFormData(prev => ({
-      ...prev,
-      roles: prev.roles.includes(roleSlug)
-        ? prev.roles.filter(r => r !== roleSlug)
-        : [...prev.roles, roleSlug]
-    }));
   };
 
   return (
@@ -134,22 +126,17 @@ function UserModal({ user, roles, groups, onClose, onSave }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
-            <div className="flex flex-wrap gap-2">
+            <select
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
               {roles.map((role) => (
-                <button
-                  key={role.slug}
-                  type="button"
-                  onClick={() => toggleRole(role.slug)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                    formData.roles.includes(role.slug)
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
+                <option key={role.slug} value={role.slug}>
                   {role.name}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
           <div className="flex items-center gap-2">
