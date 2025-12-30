@@ -449,9 +449,11 @@ let warnedRenameFiles: Set<string> = new Set();
 
 type CopyState = {
   sessionId: string;
-  pendingByKey: Map<string, { name: string; sizeBytes: number }>;
+  pendingByKey: Map<string, { name: string; sizeBytes: number; relativePath: string }>;
   hashByKey: Map<string, string>;
   copiedKeys: Set<string>;
+  verifiedKeys: Set<string>; // Files that passed checksum verification
+  renamedFiles: Map<string, string>; // originalName -> newName
 };
 
 type MediaBatchItem = {
@@ -687,13 +689,31 @@ function handleRenameGuidance(evt: any) {
   const newName: string = evt?.newName;
   const oldName: string = evt?.oldName;
   const newPath: string = evt?.newPath;
+  const sizeBytes: number = evt?.sizeBytes ?? 0;
   if (!newName || !newPath) return;
 
-  // Editor-first prompt: when a clip is renamed (often right before reviewing), ask if they want to report an issue.
-  // Throttle to avoid nagging.
+  // Track renamed files in copyState for backup eligibility
+  if (copyState && oldName) {
+    copyState.renamedFiles.set(oldName, newName);
+    audit.info('copy.file_renamed', { oldName, newName, newPath });
+    
+    // Emit rename event to renderer for UI updates
+    mainWindow?.webContents?.send('copy:file-renamed', {
+      oldName,
+      newName,
+      newPath,
+      renamedCount: copyState.renamedFiles.size,
+      copiedCount: copyState.copiedKeys.size,
+    });
+  }
+
+  // Editor-first prompt: when a clip is renamed, ask if they want to report an issue.
+  // This is the key moment for issue reporting - after viewing, before moving on.
   const nowMs = Date.now();
   const promptKey = String(newPath);
-  if (nowMs - lastIssuePromptAtMs > 30_000 && lastIssuePromptKey !== promptKey) {
+  
+  // Always prompt for issue on rename (reduced throttle for better UX)
+  if (nowMs - lastIssuePromptAtMs > 10_000 || lastIssuePromptKey !== promptKey) {
     lastIssuePromptAtMs = nowMs;
     lastIssuePromptKey = promptKey;
 
@@ -708,11 +728,14 @@ function handleRenameGuidance(evt: any) {
     };
     emitUiState();
 
-    showMessageBubble('Issue with this clip?', String(newName), 4500);
+    // Blink mascot attention for issue reporting opportunity
+    setMascotAttention(true);
+    showMessageBubble('Issue with this clip?', String(newName), 5000);
 
-    // Auto-clear after a short window so it doesn't stick forever.
+    // Auto-clear attention and prompt after window
     setTimeout(() => {
       try {
+        setMascotAttention(false);
         if (uiStateCtx?.issuePrompt?.clipPath === newPath) {
           uiStateCtx = { ...(uiStateCtx ?? {}), issuePrompt: null };
           emitUiState();
@@ -720,7 +743,7 @@ function handleRenameGuidance(evt: any) {
       } catch {
         // ignore
       }
-    }, 60_000);
+    }, 45_000);
   }
 
   // avoid spamming for the same file name/path
@@ -1498,11 +1521,11 @@ function hideMessageBubble(): void {
 }
 
 function buildCopyStateFromSnapshot(snapshot: SnapshotResult): CopyState {
-  const pendingByKey = new Map<string, { name: string; sizeBytes: number }>();
+  const pendingByKey = new Map<string, { name: string; sizeBytes: number; relativePath: string }>();
   const hashByKey = new Map<string, string>();
   for (const f of snapshot.files) {
     const key = makeFileKey(f.name, f.sizeBytes);
-    pendingByKey.set(key, { name: f.name, sizeBytes: f.sizeBytes });
+    pendingByKey.set(key, { name: f.name, sizeBytes: f.sizeBytes, relativePath: f.relativePath });
     hashByKey.set(key, f.quickHash);
   }
   return {
@@ -1510,6 +1533,8 @@ function buildCopyStateFromSnapshot(snapshot: SnapshotResult): CopyState {
     pendingByKey,
     hashByKey,
     copiedKeys: new Set<string>(),
+    verifiedKeys: new Set<string>(),
+    renamedFiles: new Map<string, string>(),
   };
 }
 
@@ -1540,6 +1565,38 @@ async function tryHandleCopiedFile(candidate: CopyCandidate): Promise<void> {
   const key = makeFileKey(candidate.filename, candidate.sizeBytes);
   if (!copyState.pendingByKey.has(key)) return;
   if (copyState.copiedKeys.has(key)) return;
+
+  // Checksum verification: compare destination file hash with source hash
+  const sourceHash = copyState.hashByKey.get(key);
+  let verified = false;
+  if (sourceHash) {
+    try {
+      const destHash = await computeQuickHash(candidate.fullPath, candidate.sizeBytes);
+      if (destHash === sourceHash) {
+        verified = true;
+        copyState.verifiedKeys.add(key);
+        audit.info('copy.checksum_verified', { filename: candidate.filename, hash: sourceHash });
+      } else {
+        audit.warn('copy.checksum_mismatch', {
+          filename: candidate.filename,
+          sourceHash,
+          destHash,
+          fullPath: candidate.fullPath,
+        });
+        emitAttentionRequired('COPY_CHECKSUM_MISMATCH', {
+          filename: candidate.filename,
+          fullPath: candidate.fullPath,
+          sourceHash,
+          destHash,
+          message: 'File may be incomplete or corrupted. Try copying again.',
+        });
+        return; // Don't mark as copied if checksum fails
+      }
+    } catch (e: any) {
+      audit.warn('copy.checksum_error', { filename: candidate.filename, error: e?.message });
+      // Continue without verification if hash computation fails
+    }
+  }
 
   // Duplication control (non-blocking): if this file's quickHash has been seen in previous sessions,
   // warn once per file per session.
@@ -3071,6 +3128,105 @@ function registerIpc() {
       return res;
     }
   );
+
+  // Copy state for renderer UI
+  ipcMain.handle('copy:get-state', async () => {
+    if (!copyState) return null;
+    return {
+      sessionId: copyState.sessionId,
+      totalFiles: copyState.pendingByKey.size,
+      copiedCount: copyState.copiedKeys.size,
+      verifiedCount: copyState.verifiedKeys.size,
+      renamedCount: copyState.renamedFiles.size,
+      copiedFiles: Array.from(copyState.copiedKeys),
+      renamedFiles: Object.fromEntries(copyState.renamedFiles),
+      pendingFiles: Array.from(copyState.pendingByKey.values()).filter(
+        f => !copyState!.copiedKeys.has(makeFileKey(f.name, f.sizeBytes))
+      ),
+    };
+  });
+
+  // Hard drive binding for backup destinations
+  ipcMain.handle('backup:bind-drive', async (_evt: IpcMainInvokeEvent, payload: { 
+    drivePath: string; 
+    driveLabel: string;
+    driveSerial?: string;
+  }) => {
+    const cfg = store.get('config') ?? {};
+    const boundDrives = cfg.boundBackupDrives ?? [];
+    
+    // Check if already bound
+    const existing = boundDrives.find((d: any) => d.drivePath === payload.drivePath);
+    if (existing) {
+      return { ok: true, status: 'already_bound', drive: existing };
+    }
+
+    const newDrive = {
+      drivePath: payload.drivePath,
+      driveLabel: payload.driveLabel,
+      driveSerial: payload.driveSerial ?? null,
+      boundAtIso: new Date().toISOString(),
+    };
+
+    boundDrives.push(newDrive);
+    store.set('config', { ...cfg, boundBackupDrives: boundDrives });
+    
+    // Also add to backup destinations if not already there
+    const destinations = cfg.backupDestinations ?? [];
+    if (!destinations.includes(payload.drivePath)) {
+      destinations.push(payload.drivePath);
+      store.set('config', { ...store.get('config'), backupDestinations: destinations });
+    }
+
+    audit.info('backup.drive_bound', { drivePath: payload.drivePath, driveLabel: payload.driveLabel });
+    return { ok: true, status: 'bound', drive: newDrive };
+  });
+
+  ipcMain.handle('backup:list-bound-drives', async () => {
+    const cfg = store.get('config') ?? {};
+    return cfg.boundBackupDrives ?? [];
+  });
+
+  ipcMain.handle('backup:unbind-drive', async (_evt: IpcMainInvokeEvent, payload: { drivePath: string }) => {
+    const cfg = store.get('config') ?? {};
+    const boundDrives = (cfg.boundBackupDrives ?? []).filter((d: any) => d.drivePath !== payload.drivePath);
+    store.set('config', { ...cfg, boundBackupDrives: boundDrives });
+    audit.info('backup.drive_unbound', { drivePath: payload.drivePath });
+    return { ok: true };
+  });
+
+  // Get suggested copy folder based on binding
+  ipcMain.handle('copy:get-suggested-folder', async () => {
+    const active = sdSessionEngine?.getActive();
+    if (!active || !active.binding) return null;
+    
+    const cfg = store.get('config');
+    const watchedFolders = cfg?.watchedFolders ?? [];
+    if (watchedFolders.length === 0) return null;
+
+    const folderName = `SD ${active.binding.cameraNumber}${active.binding.sdLabel}`;
+    const suggestedPath = path.join(watchedFolders[0], folderName);
+    
+    return {
+      folderName,
+      suggestedPath,
+      watchedFolder: watchedFolders[0],
+      cameraNumber: active.binding.cameraNumber,
+      sdLabel: active.binding.sdLabel,
+    };
+  });
+
+  // Create SD-labeled folder in watched folder
+  ipcMain.handle('copy:create-sd-folder', async (_evt: IpcMainInvokeEvent, payload: { folderPath: string }) => {
+    try {
+      await fs.mkdir(payload.folderPath, { recursive: true });
+      audit.info('copy.sd_folder_created', { folderPath: payload.folderPath });
+      return { ok: true, folderPath: payload.folderPath };
+    } catch (e: any) {
+      audit.warn('copy.sd_folder_create_failed', { folderPath: payload.folderPath, error: e?.message });
+      return { ok: false, reason: e?.message ?? 'unknown' };
+    }
+  });
 
   ipcMain.handle('config:get-watched-folders', async () => {
     return store.get('config')?.watchedFolders ?? [];

@@ -61,11 +61,21 @@ declare global {
         pause: () => Promise<any>;
         resume: () => Promise<any>;
         retryFailed: () => Promise<any>;
+        bindDrive: (payload: { drivePath: string; driveLabel: string; driveSerial?: string }) => Promise<any>;
+        listBoundDrives: () => Promise<any[]>;
+        unbindDrive: (payload: { drivePath: string }) => Promise<any>;
         onProgress: (handler: (p: any) => void) => () => void;
         onStatus: (handler: (s: any) => void) => () => void;
         onFileError: (handler: (e: any) => void) => () => void;
         onComplete: (handler: (d: any) => void) => () => void;
         onError: (handler: (e: any) => void) => () => void;
+      };
+      copy?: {
+        getState: () => Promise<any>;
+        getSuggestedFolder: () => Promise<any>;
+        createSdFolder: (payload: { folderPath: string }) => Promise<any>;
+        onFileCopied: (handler: (d: any) => void) => () => void;
+        onFileRenamed: (handler: (d: any) => void) => () => void;
       };
     };
   }

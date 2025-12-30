@@ -12,6 +12,7 @@ const allowedEventChannels = new Set<string>([
   'attention:required',
   'rename:tip',
   'copy:file-copied',
+  'copy:file-renamed',
   'ui:toast',
   'ui:state',
   'event:policy',
@@ -132,11 +133,26 @@ const gate1 = {
     resume: () => ipcRenderer.invoke('backup:resume') as Promise<any>,
     retryFailed: () => ipcRenderer.invoke('backup:retry-failed') as Promise<any>,
 
+    // Hard drive binding
+    bindDrive: (payload: { drivePath: string; driveLabel: string; driveSerial?: string }) =>
+      ipcRenderer.invoke('backup:bind-drive', payload) as Promise<any>,
+    listBoundDrives: () => ipcRenderer.invoke('backup:list-bound-drives') as Promise<any>,
+    unbindDrive: (payload: { drivePath: string }) =>
+      ipcRenderer.invoke('backup:unbind-drive', payload) as Promise<any>,
+
     onProgress: (handler: (p: any) => void) => on('backup:progress', handler),
     onStatus: (handler: (s: any) => void) => on('backup:status', handler),
     onFileError: (handler: (e: any) => void) => on('backup:file-error', handler),
     onComplete: (handler: (d: any) => void) => on('backup:complete', handler),
     onError: (handler: (e: any) => void) => on('backup:error', handler),
+  },
+  copy: {
+    getState: () => ipcRenderer.invoke('copy:get-state') as Promise<any>,
+    getSuggestedFolder: () => ipcRenderer.invoke('copy:get-suggested-folder') as Promise<any>,
+    createSdFolder: (payload: { folderPath: string }) =>
+      ipcRenderer.invoke('copy:create-sd-folder', payload) as Promise<any>,
+    onFileCopied: (handler: (d: any) => void) => on('copy:file-copied', handler),
+    onFileRenamed: (handler: (d: any) => void) => on('copy:file-renamed', handler),
   },
 };
 

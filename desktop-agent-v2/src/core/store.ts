@@ -1,6 +1,13 @@
 import Store from 'electron-store';
 import { DEFAULT_API_URL } from './constants';
 
+export type BoundBackupDrive = {
+  drivePath: string;
+  driveLabel: string;
+  driveSerial?: string | null;
+  boundAtIso: string;
+};
+
 export type Gate1Config = {
   apiUrl: string;
   updateUrl?: string;
@@ -10,6 +17,7 @@ export type Gate1Config = {
   backupEnabled?: boolean;
   backupDestination?: string | null;
   backupDestinations?: string[];
+  boundBackupDrives?: BoundBackupDrive[];
 };
 
 export type Gate1LocalState = {
