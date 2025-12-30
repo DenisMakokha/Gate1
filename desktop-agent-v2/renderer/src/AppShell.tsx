@@ -63,6 +63,7 @@ export default function AppShell() {
   const [bindingPayload, setBindingPayload] = useState<SdBindingPayload | null>(null);
 
   const [snapshotProgress, setSnapshotProgress] = useState<any>(null);
+  const [snapshot, setSnapshot] = useState<any>(null);
   const [copyProgress, setCopyProgress] = useState<{ filesCopied?: number; filesPending?: number; filename?: string } | null>(null);
 
   useUiEvents(dispatch);
@@ -104,6 +105,7 @@ export default function AppShell() {
     unsubs.push(
       api.events.on('snapshot:complete', (p: any) => {
         setSnapshotProgress({ ...(p ?? {}), status: 'complete' });
+        setSnapshot(p); // Store the complete snapshot for CopyAssistant
       })
     );
     unsubs.push(
@@ -231,6 +233,7 @@ export default function AppShell() {
             activity={ui.activity}
             snapshotProgress={snapshotProgress}
             copyProgress={copyProgress}
+            snapshot={snapshot}
           />
         ) : null}
         {!needsLogin && !needsRegistration && tab === 'sessions' ? <SessionsPage coreStatus={coreStatus} /> : null}

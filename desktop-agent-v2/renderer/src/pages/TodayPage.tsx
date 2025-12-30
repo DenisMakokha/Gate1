@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityFeed } from '../components/ActivityFeed';
+import { CopyAssistant } from '../components/CopyAssistant';
 import type { ActivityItem } from '../components/ui';
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
   activity: ActivityItem[];
   snapshotProgress?: any;
   copyProgress?: { filesCopied?: number; filesPending?: number; filename?: string } | null;
+  snapshot?: any;
 };
 
 export function TodayPage(props: Props) {
@@ -18,6 +20,47 @@ export function TodayPage(props: Props) {
 
   const online = typeof s?.online === 'boolean' ? s.online : null;
   const queue = s?.offlineQueueSize;
+
+  // Track copied and renamed files for CopyAssistant
+  const [copiedFiles, setCopiedFiles] = useState<Set<string>>(new Set());
+  const [renamedFiles, setRenamedFiles] = useState<Map<string, string>>(new Map());
+  const [copyState, setCopyState] = useState<any>(null);
+
+  // Load copy state and listen for updates
+  useEffect(() => {
+    const api = window.gate1;
+    
+    const loadCopyState = async () => {
+      if (api?.copy?.getState) {
+        const state = await api.copy.getState();
+        if (state) {
+          setCopyState(state);
+          setCopiedFiles(new Set(state.copiedFiles || []));
+          setRenamedFiles(new Map(Object.entries(state.renamedFiles || {})));
+        }
+      }
+    };
+
+    void loadCopyState();
+
+    // Listen for copy events
+    const unsubCopied = api?.copy?.onFileCopied?.((d: any) => {
+      if (d?.filename) {
+        setCopiedFiles(prev => new Set([...prev, d.filename]));
+      }
+    });
+
+    const unsubRenamed = api?.copy?.onFileRenamed?.((d: any) => {
+      if (d?.oldName && d?.newName) {
+        setRenamedFiles(prev => new Map([...prev, [d.oldName, d.newName]]));
+      }
+    });
+
+    return () => {
+      unsubCopied?.();
+      unsubRenamed?.();
+    };
+  }, [active?.sessionId]);
 
   const headline = (() => {
     if (st === 'ATTENTION_REQUIRED') return 'Attention needed';
@@ -176,6 +219,17 @@ export function TodayPage(props: Props) {
           ) : null}
         </div>
       </div>
+
+      {/* Copy Assistant - shows clips from snapshot and copy progress */}
+      {(active?.sessionId || props.snapshot) && (
+        <CopyAssistant
+          snapshot={props.snapshot}
+          binding={active?.binding ?? null}
+          copyProgress={props.copyProgress ?? null}
+          copiedFiles={copiedFiles}
+          renamedFiles={renamedFiles}
+        />
+      )}
 
       <ActivityFeed items={props.activity} />
     </div>
