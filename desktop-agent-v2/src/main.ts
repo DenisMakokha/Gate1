@@ -2338,6 +2338,12 @@ async function initCore() {
     }
 
     sdDetector = new SdDetectorWin();
+    audit.info('sd.detector_started', { platform: process.platform, intervalMs: 4000 });
+
+    sdDetector.on('scan-debug', (data: { drive: string; reason: string }) => {
+      audit.info('sd.scan_skip', data);
+    });
+
     sdDetector.on('sd-inserted', (sd: SdCardIdentity) => {
       audit.info('sd.inserted', sd);
       mainWindow?.webContents?.send('sd:inserted', sd);
@@ -3275,9 +3281,12 @@ function registerIpc() {
       const expiryIso = new Date(Date.now() + res.authorization.expires_in * 1000).toISOString();
       await setToken(res.authorization.token, expiryIso);
       api.setToken(res.authorization.token);
-      lastAuthOk = !!store.get('agentId');
+      lastAuthOk = true; // User has valid token after login
       updateMascotConnectivity();
       audit.info('auth.login_success', { userId: res.user.id, expiresAt: expiryIso });
+
+      // Fetch active event immediately after login
+      void refreshActiveEventSummary();
 
       return { user: res.user, expiresAt: expiryIso };
     }
@@ -3340,11 +3349,14 @@ function registerIpc() {
 
       if (res?.agent_id) {
         store.set('agentId', res.agent_id);
+        lastAuthOk = true; // Agent is now registered and authenticated
         audit.info('agent.register_success', { agentId: res.agent_id, deviceId });
 
         // become "ready" quickly: sync any queued ops and refresh config (non-blocking)
         void drainQueueOnce();
         void refreshAgentConfig();
+        void refreshActiveEventSummary(); // Fetch active event after registration
+        updateMascotConnectivity(); // Update mascot state
         startStreamTunnelWs();
       }
 

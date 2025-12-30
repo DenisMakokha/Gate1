@@ -142,8 +142,14 @@ export class SdDetectorWin extends EventEmitter {
       const candidates: SdDriveInfo[] = [];
       for (const d of drives) {
         // cheap accessibility check
-        if (!(await pathExists(d.mountPath))) continue;
-        if (!(await isLikelyCameraSdRoot(d.mountPath))) continue;
+        if (!(await pathExists(d.mountPath))) {
+          this.emit('scan-debug', { drive: d.driveLetter, reason: 'path_not_accessible' });
+          continue;
+        }
+        if (!(await isLikelyCameraSdRoot(d.mountPath))) {
+          this.emit('scan-debug', { drive: d.driveLetter, reason: 'no_dcim_or_private_folder' });
+          continue;
+        }
         candidates.push(d);
       }
 
