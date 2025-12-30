@@ -3,7 +3,22 @@ import {
   Shield, Calendar, Trash2, AlertTriangle, CheckCircle, 
   Clock, Settings, RefreshCw, Info, Lock
 } from 'lucide-react';
-import api from '../services/api';
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 export default function DataProtection() {
   const [events, setEvents] = useState([]);
@@ -27,9 +42,10 @@ export default function DataProtection() {
     try {
       setLoading(true);
       const response = await api.get('/media-deletion/status');
-      setEvents(response.data);
+      setEvents(response.data || []);
     } catch (error) {
       console.error('Failed to load events:', error);
+      setEvents([]);
     } finally {
       setLoading(false);
     }
