@@ -36,6 +36,7 @@ let heartbeatTimer: NodeJS.Timeout | null = null;
 let queueDrainTimer: NodeJS.Timeout | null = null;
 let configRefreshTimer: NodeJS.Timeout | null = null;
 let streamTunnelTimer: NodeJS.Timeout | null = null;
+let mediaDeletionTimer: NodeJS.Timeout | null = null;
 let streamTunnelWs: WebSocket | null = null;
 let streamTunnelWsReconnectTimer: NodeJS.Timeout | null = null;
 let streamTunnelWsConnected = false;
@@ -145,6 +146,128 @@ let lastAuthOk = false;
 let lastMascotNet: boolean | null = null;
 let lastMascotLive = false;
 let lastNetBubbleAtMs = 0;
+
+// Media Deletion / Data Protection
+async function checkAndProcessMediaDeletion(): Promise<void> {
+  const tokenData = await getToken();
+  if (!tokenData || isTokenExpired(tokenData.expiryIso)) {
+    return; // Not authenticated
+  }
+
+  const ping = connectivity.getSnapshot();
+  if (!ping.online) {
+    return; // Offline, will retry later
+  }
+
+  const currentDeviceId = getOrCreateDeviceId();
+  try {
+    const response = await api.getPendingDeletionTasks(currentDeviceId);
+    if (!response.tasks || response.tasks.length === 0) {
+      return; // No pending tasks
+    }
+
+    audit.info('media_deletion.tasks_received', { count: response.count });
+
+    for (const task of response.tasks) {
+      try {
+        await processMediaDeletionTask(task);
+      } catch (err) {
+        audit.warn('media_deletion.task_failed', { 
+          taskId: task.id, 
+          error: (err as Error)?.message 
+        });
+      }
+    }
+  } catch (err) {
+    // Silently fail - will retry on next interval
+    audit.warn('media_deletion.check_failed', { error: (err as Error)?.message });
+  }
+}
+
+async function processMediaDeletionTask(task: {
+  id: number;
+  event_id: number;
+  event_name: string;
+  media_id: number;
+  file_path: string;
+  filename: string;
+  file_size: number;
+  checksum: string;
+  scheduled_at: string;
+}): Promise<void> {
+  const fs = await import('fs/promises');
+  const path = await import('path');
+
+  audit.info('media_deletion.processing', { 
+    taskId: task.id, 
+    filename: task.filename,
+    eventName: task.event_name 
+  });
+
+  // Get watched folders from config
+  const cfg = store.get('config');
+  const watchedFolders: string[] = cfg?.watchedFolders ?? [];
+
+  let deleted = false;
+  let errorMessage: string | null = null;
+
+  // Search for the file in watched folders
+  for (const folder of watchedFolders) {
+    try {
+      // Try direct path first
+      const directPath = path.join(folder, task.filename);
+      try {
+        await fs.access(directPath);
+        await fs.unlink(directPath);
+        audit.info('media_deletion.file_deleted', { path: directPath, taskId: task.id });
+        deleted = true;
+        break;
+      } catch {
+        // File not at direct path, try searching subdirectories
+      }
+
+      // Search in subdirectories (one level deep)
+      const entries = await fs.readdir(folder, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(folder, entry.name, task.filename);
+          try {
+            await fs.access(subPath);
+            await fs.unlink(subPath);
+            audit.info('media_deletion.file_deleted', { path: subPath, taskId: task.id });
+            deleted = true;
+            break;
+          } catch {
+            // Not found in this subdirectory
+          }
+        }
+      }
+      if (deleted) break;
+    } catch (err) {
+      errorMessage = (err as Error)?.message ?? 'Unknown error';
+    }
+  }
+
+  // Report completion to server
+  const currentDeviceId = getOrCreateDeviceId();
+  try {
+    await api.reportDeletionTaskCompletion({
+      task_id: task.id,
+      device_id: currentDeviceId,
+      status: deleted ? 'completed' : 'failed',
+      error_message: deleted ? undefined : (errorMessage ?? 'File not found in watched folders'),
+    });
+    audit.info('media_deletion.reported', { 
+      taskId: task.id, 
+      status: deleted ? 'completed' : 'failed' 
+    });
+  } catch (err) {
+    audit.warn('media_deletion.report_failed', { 
+      taskId: task.id, 
+      error: (err as Error)?.message 
+    });
+  }
+}
 
 type BackupHashScanCache = {
   key: string;
@@ -2759,9 +2882,18 @@ async function initCore() {
     void refreshActiveEventSummary();
   }, 5 * 60_000);
 
+  // Media deletion check loop (every 5 minutes)
+  if (mediaDeletionTimer) clearInterval(mediaDeletionTimer);
+  mediaDeletionTimer = setInterval(() => {
+    void checkAndProcessMediaDeletion();
+  }, 5 * 60_000);
+
   // initial best-effort refresh (do not block startup)
   void refreshAgentConfig();
   void refreshActiveEventSummary();
+  
+  // Initial media deletion check (delayed to allow auth to complete)
+  setTimeout(() => void checkAndProcessMediaDeletion(), 30_000);
 }
 
 function registerIpc() {

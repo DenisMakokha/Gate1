@@ -187,4 +187,35 @@ export class ApiClient {
     const res = await this.client.post('/users/heartbeat', payload);
     return res.data;
   }
+
+  // Media Deletion / Data Protection
+  async getPendingDeletionTasks(deviceId: string): Promise<{
+    tasks: Array<{
+      id: number;
+      event_id: number;
+      event_name: string;
+      media_id: number;
+      file_path: string;
+      filename: string;
+      file_size: number;
+      checksum: string;
+      scheduled_at: string;
+    }>;
+    count: number;
+  }> {
+    const res = await this.client.get('/media-deletion/pending-tasks', {
+      params: { device_id: deviceId },
+    });
+    return res.data;
+  }
+
+  async reportDeletionTaskCompletion(payload: {
+    task_id: number;
+    device_id: string;
+    status: 'completed' | 'failed';
+    error_message?: string;
+  }): Promise<any> {
+    const res = await this.client.post('/media-deletion/report-completion', payload);
+    return res.data;
+  }
 }
