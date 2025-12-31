@@ -23,12 +23,18 @@ export class CopyObserver extends EventEmitter {
 
   private recentlyUnlinked: Array<{ fullPath: string; dir: string; sizeBytes: number; ts: number }> = [];
   private readonly renameWindowMs = 2500;
+  
+  // Track file sizes for rename detection (file is deleted before we can stat it)
+  private fileSizeCache: Map<string, number> = new Map();
 
   start(folders: string[]) {
     this.stop();
     this.watched = folders;
 
     if (!folders.length) return;
+
+    // Pre-scan existing files to populate size cache for rename detection
+    void this.scanExistingFiles(folders);
 
     this.watcher = chokidar.watch(folders, {
       ignoreInitial: true,
@@ -58,6 +64,7 @@ export class CopyObserver extends EventEmitter {
       void this.watcher.close();
       this.watcher = null;
     }
+    this.fileSizeCache.clear();
   }
 
   getWatchedFolders(): string[] {
@@ -78,6 +85,17 @@ export class CopyObserver extends EventEmitter {
     }
 
     if (!st.isFile()) return;
+
+    // Cache file size for rename detection
+    this.fileSizeCache.set(filePath, st.size);
+    
+    // Bound cache size
+    if (this.fileSizeCache.size > 5000) {
+      const keys = Array.from(this.fileSizeCache.keys());
+      for (let i = 0; i < 1000; i++) {
+        this.fileSizeCache.delete(keys[i]);
+      }
+    }
 
     const candidate: CopyCandidate = {
       fullPath: filePath,
@@ -111,14 +129,16 @@ export class CopyObserver extends EventEmitter {
     const videoExts = new Set(['.mp4', '.mov', '.avi', '.mkv', '.mts', '.m2ts']);
     if (!videoExts.has(ext)) return;
 
-    // Use stored size if possible; if stat fails, skip rename correlation.
-    let sizeBytes = 0;
-    try {
-      const st = await fs.stat(filePath);
-      sizeBytes = st.size;
-    } catch {
+    // Use cached size - file is already deleted so we can't stat it
+    const sizeBytes = this.fileSizeCache.get(filePath);
+    if (!sizeBytes) {
+      // File wasn't in our cache (maybe existed before watcher started)
+      // Skip rename correlation for this file
       return;
     }
+    
+    // Remove from cache
+    this.fileSizeCache.delete(filePath);
 
     const now = Date.now();
     this.recentlyUnlinked = this.recentlyUnlinked.filter(r => now - r.ts <= this.renameWindowMs);
@@ -127,6 +147,58 @@ export class CopyObserver extends EventEmitter {
     // Bound memory
     if (this.recentlyUnlinked.length > 200) {
       this.recentlyUnlinked.splice(0, this.recentlyUnlinked.length - 200);
+    }
+  }
+
+  /**
+   * Scan existing files in watched folders to populate size cache.
+   * This enables rename detection for files that existed before the watcher started.
+   */
+  private async scanExistingFiles(folders: string[]): Promise<void> {
+    const videoExts = new Set(['.mp4', '.mov', '.avi', '.mkv', '.mts', '.m2ts']);
+    
+    for (const folder of folders) {
+      try {
+        await this.scanDirectory(folder, videoExts, 0, 8);
+      } catch {
+        // Folder might not exist or be inaccessible
+      }
+    }
+  }
+
+  private async scanDirectory(dir: string, videoExts: Set<string>, depth: number, maxDepth: number): Promise<void> {
+    if (depth > maxDepth) return;
+    
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        
+        if (entry.isDirectory()) {
+          await this.scanDirectory(fullPath, videoExts, depth + 1, maxDepth);
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (videoExts.has(ext)) {
+            try {
+              const st = await fs.stat(fullPath);
+              this.fileSizeCache.set(fullPath, st.size);
+            } catch {
+              // File might have been deleted
+            }
+          }
+        }
+      }
+    } catch {
+      // Directory might not be accessible
+    }
+    
+    // Bound cache size during scan
+    if (this.fileSizeCache.size > 10000) {
+      const keys = Array.from(this.fileSizeCache.keys());
+      for (let i = 0; i < 2000; i++) {
+        this.fileSizeCache.delete(keys[i]);
+      }
     }
   }
 }
