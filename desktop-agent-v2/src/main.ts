@@ -290,6 +290,7 @@ async function detectBackupDiskReady(): Promise<void> {
   const candidates: string[] = [];
   const boundDrives = cfg?.boundBackupDrives ?? [];
   const boundPaths = new Set(boundDrives.map((d: any) => d.drivePath));
+  const boundByPath = new Map(boundDrives.map((d: any) => [d.drivePath, d]));
 
   const last = store.get('lastBackupSummary') as any;
   const lastDest = last?.destRoot ? String(last.destRoot) : null;
@@ -308,8 +309,9 @@ async function detectBackupDiskReady(): Promise<void> {
     if (info.exists && info.writable) {
       const key = `${active.sessionId}:${p}`;
       
-      // Check if this drive is bound
+      // Check if this drive is bound locally
       const isBound = boundPaths.has(p);
+      const localDrive = boundByPath.get(p);
       
       // Bubble only when it becomes ready (or changes disk)
       if (lastBackupReadyKey !== key) {
@@ -329,8 +331,26 @@ async function detectBackupDiskReady(): Promise<void> {
               driveLabel: deriveDiskLabel(p),
             });
             showMessageBubble('New backup drive detected.', `${deriveDiskLabel(p)} • Click to configure`, 4500);
+          } else if (isBound && localDrive?.hardwareId) {
+            // Check if drive is recognized on server
+            const ping = connectivity.getSnapshot();
+            if (ping.online) {
+              try {
+                const res = await api.getBackupDrive(localDrive.hardwareId);
+                if (res?.status === 'found' && res.backup_drive) {
+                  const label = res.backup_drive.display_label || res.backup_drive.label || deriveDiskLabel(p);
+                  showMessageBubble(`Backup ${label} connected`, 'Ready for backup', 3500);
+                } else {
+                  showMessageBubble('Backup disk ready.', `${deriveDiskLabel(p)}`, 3500);
+                }
+              } catch {
+                showMessageBubble('Backup disk ready.', `${deriveDiskLabel(p)}`, 3500);
+              }
+            } else {
+              showMessageBubble('Backup disk ready.', `${deriveDiskLabel(p)}`, 3500);
+            }
           } else {
-            showMessageBubble('Backup disk ready.', `Disk: ${deriveDiskLabel(p)} • Click to open`, 3500);
+            showMessageBubble('Backup disk ready.', `${deriveDiskLabel(p)}`, 3500);
           }
         }
       }
@@ -1440,12 +1460,16 @@ function ensureMascotWindow(): void {
     skipTaskbar: true,
     hasShadow: false,
     show: true,
+    focusable: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  
+  // Set to screen-saver level to stay on top of all windows including fullscreen
+  mascotWindow.setAlwaysOnTop(true, 'screen-saver');
 
   const mascotSvgNormal = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -2657,10 +2681,11 @@ async function initCore() {
           mainWindow?.webContents?.send('sd:recognized', res.sd_card);
           pulseMascot('sd');
 
-          // Mascot-level: show camera + SD label briefly.
+          // Mascot-level: show recognized SD card with display label
+          const displayLabel = res.sd_card.display_label || `${res.sd_card.camera_number}${res.sd_card.sd_label}`;
           showMessageBubble(
-            'Session active.',
-            `Camera: ${res.sd_card.camera_number ?? '-'} • SD: ${res.sd_card.sd_label ?? '-'}`,
+            `SD ${displayLabel} inserted`,
+            'Ready to copy files',
             3500
           );
 
