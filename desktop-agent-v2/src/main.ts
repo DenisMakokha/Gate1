@@ -2591,13 +2591,33 @@ async function initCore() {
       emitAttentionRequired('SD_SESSION_OVERLAP', data);
     });
 
-    // If we restored an active session, surface it.
+    // If we restored an active session, check if the SD is still present.
+    // If not, mark it as removed to prevent overlap errors.
     const restored = sdSessionEngine.getActive();
     if (restored && restored.status === 'active') {
       mainWindow?.webContents?.send('session:restored', restored);
     }
 
     sdDetector = new SdDetectorWin();
+    
+    // After detector starts, verify restored session's SD is still present
+    if (restored && restored.status === 'active') {
+      setTimeout(async () => {
+        const mounted = sdDetector?.getMounted?.() ?? [];
+        const sdStillPresent = mounted.some((m: any) => m.hardwareId === restored.sdHardwareId);
+        if (!sdStillPresent) {
+          audit.warn('session.restored_sd_missing', { 
+            sessionId: restored.sessionId, 
+            sdHardwareId: restored.sdHardwareId 
+          });
+          // Mark as removed since SD is no longer present
+          sdSessionEngine?.markRemoved(restored.sdHardwareId);
+          // Clear the session entirely to prevent overlap on next SD
+          sdSessionEngine?.clear();
+          audit.info('session.cleared_stale_on_startup', { sessionId: restored.sessionId });
+        }
+      }, 5000); // Wait for SD detector to complete initial scan
+    }
     audit.info('sd.detector_started', { platform: process.platform, intervalMs: 4000 });
 
     sdDetector.on('scan-debug', (data: { drive: string; reason: string }) => {
