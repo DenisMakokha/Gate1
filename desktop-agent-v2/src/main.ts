@@ -3411,9 +3411,15 @@ function registerIpc() {
     drivePath: string; 
     driveLabel: string;
     driveSerial?: string;
+    hardwareId?: string;
+    fsUuid?: string;
+    capacityBytes?: number;
   }) => {
     const cfg = store.get('config') ?? {};
     const boundDrives = cfg.boundBackupDrives ?? [];
+    
+    // Generate hardware ID if not provided (use path + serial as fallback)
+    const hardwareId = payload.hardwareId || `${payload.drivePath}:${payload.driveSerial || 'unknown'}`;
     
     // Check if already bound
     const existing = boundDrives.find((d: any) => d.drivePath === payload.drivePath);
@@ -3425,8 +3431,57 @@ function registerIpc() {
       drivePath: payload.drivePath,
       driveLabel: payload.driveLabel,
       driveSerial: payload.driveSerial ?? null,
+      hardwareId,
+      fsUuid: payload.fsUuid ?? null,
+      capacityBytes: payload.capacityBytes ?? null,
       boundAtIso: new Date().toISOString(),
+      serverDriveId: null as number | null,
     };
+
+    // Sync with server (non-blocking)
+    const ping = connectivity.getSnapshot();
+    if (ping.online) {
+      try {
+        const res = await api.bindBackupDrive({
+          hardware_id: hardwareId,
+          fs_uuid: payload.fsUuid,
+          label: payload.driveLabel,
+          serial_number: payload.driveSerial,
+          capacity_bytes: payload.capacityBytes,
+        });
+        if (res?.backup_drive_id) {
+          newDrive.serverDriveId = res.backup_drive_id;
+          audit.info('backup.drive_synced_to_server', { hardwareId, serverDriveId: res.backup_drive_id });
+        }
+      } catch (err) {
+        audit.warn('backup.drive_sync_failed', { hardwareId, error: (err as Error)?.message });
+        // Queue for later sync
+        offlineQueue.enqueue({
+          endpoint: '/agent/backup-drive/bind',
+          method: 'POST',
+          payload: {
+            hardware_id: hardwareId,
+            fs_uuid: payload.fsUuid,
+            label: payload.driveLabel,
+            serial_number: payload.driveSerial,
+            capacity_bytes: payload.capacityBytes,
+          },
+        });
+      }
+    } else {
+      // Queue for later sync
+      offlineQueue.enqueue({
+        endpoint: '/agent/backup-drive/bind',
+        method: 'POST',
+        payload: {
+          hardware_id: hardwareId,
+          fs_uuid: payload.fsUuid,
+          label: payload.driveLabel,
+          serial_number: payload.driveSerial,
+          capacity_bytes: payload.capacityBytes,
+        },
+      });
+    }
 
     boundDrives.push(newDrive);
     store.set('config', { ...cfg, boundBackupDrives: boundDrives });
@@ -3438,7 +3493,7 @@ function registerIpc() {
       store.set('config', { ...store.get('config'), backupDestinations: destinations });
     }
 
-    audit.info('backup.drive_bound', { drivePath: payload.drivePath, driveLabel: payload.driveLabel });
+    audit.info('backup.drive_bound', { drivePath: payload.drivePath, driveLabel: payload.driveLabel, hardwareId });
     return { ok: true, status: 'bound', drive: newDrive };
   });
 

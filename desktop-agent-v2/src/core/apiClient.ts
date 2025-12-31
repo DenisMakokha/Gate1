@@ -218,4 +218,26 @@ export class ApiClient {
     const res = await this.client.post('/media-deletion/report-completion', payload);
     return res.data;
   }
+
+  // Backup Drive Binding
+  async getBackupDrive(hardwareId: string): Promise<any> {
+    const res = await this.client.get('/agent/backup-drive', { params: { hardware_id: hardwareId } });
+    return res.data;
+  }
+
+  async bindBackupDrive(payload: {
+    hardware_id: string;
+    fs_uuid?: string;
+    label?: string;
+    serial_number?: string;
+    capacity_bytes?: number;
+  }): Promise<any> {
+    const res = await this.client.post('/agent/backup-drive/bind', payload);
+    return res.data;
+  }
+
+  async listBackupDrives(): Promise<any> {
+    const res = await this.client.get('/agent/backup-drives');
+    return res.data;
+  }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Agent;
 use App\Models\AuditLog;
+use App\Models\BackupDrive;
 use App\Models\SdCard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -211,6 +212,86 @@ class AgentController extends Controller
                 'last_used_at' => $sdCard->last_used_at,
             ],
         ]);
+    }
+
+    public function bindBackupDrive(Request $request): JsonResponse
+    {
+        $request->validate([
+            'hardware_id' => 'required|string',
+            'fs_uuid' => 'nullable|string',
+            'label' => 'nullable|string|max:100',
+            'serial_number' => 'nullable|string|max:100',
+            'capacity_bytes' => 'nullable|integer',
+        ]);
+
+        $user = auth('api')->user();
+
+        $drive = BackupDrive::updateOrCreate(
+            ['hardware_id' => $request->hardware_id],
+            [
+                'fs_uuid' => $request->fs_uuid,
+                'label' => $request->label,
+                'serial_number' => $request->serial_number,
+                'capacity_bytes' => $request->capacity_bytes,
+                'status' => 'active',
+                'last_used_at' => now(),
+                'bound_by_user_id' => $user->id,
+            ]
+        );
+
+        AuditLog::log('backup_drive.bind', $user, 'BackupDrive', $drive->id);
+
+        return response()->json([
+            'status' => 'bound',
+            'backup_drive_id' => $drive->id,
+            'display_label' => $drive->display_label,
+        ]);
+    }
+
+    public function getBackupDrive(Request $request): JsonResponse
+    {
+        $request->validate([
+            'hardware_id' => 'required|string',
+        ]);
+
+        $drive = BackupDrive::where('hardware_id', $request->hardware_id)->first();
+
+        if (!$drive) {
+            return response()->json([
+                'status' => 'not_found',
+                'message' => 'Backup drive not registered',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'found',
+            'backup_drive' => [
+                'id' => $drive->id,
+                'label' => $drive->label,
+                'display_label' => $drive->display_label,
+                'serial_number' => $drive->serial_number,
+                'capacity_bytes' => $drive->capacity_bytes,
+                'last_used_at' => $drive->last_used_at,
+            ],
+        ]);
+    }
+
+    public function listBackupDrives(): JsonResponse
+    {
+        $drives = BackupDrive::where('status', 'active')
+            ->orderBy('last_used_at', 'desc')
+            ->get()
+            ->map(fn($d) => [
+                'id' => $d->id,
+                'hardware_id' => $d->hardware_id,
+                'label' => $d->label,
+                'display_label' => $d->display_label,
+                'serial_number' => $d->serial_number,
+                'capacity_bytes' => $d->capacity_bytes,
+                'last_used_at' => $d->last_used_at,
+            ]);
+
+        return response()->json(['backup_drives' => $drives]);
     }
 
     private function getAgentSettings(): array

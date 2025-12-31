@@ -75,6 +75,9 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/config', [AgentController::class, 'config']);
         Route::post('/sd-card/bind', [AgentController::class, 'bindSdCard']);
         Route::get('/sd-card', [AgentController::class, 'getSdCard']);
+        Route::post('/backup-drive/bind', [AgentController::class, 'bindBackupDrive']);
+        Route::get('/backup-drive', [AgentController::class, 'getBackupDrive']);
+        Route::get('/backup-drives', [AgentController::class, 'listBackupDrives']);
 
         // Streaming tunnel (agent long-poll)
         Route::post('/stream/poll', [\App\Http\Controllers\Api\AgentStreamController::class, 'poll']);
